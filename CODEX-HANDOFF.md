@@ -82,15 +82,16 @@
 
 ## 四、待办计划（按优先级）
 
-### Week 2：用得顺（当前阶段）
+### Week 2：用得顺（✅ 已于 2026-08-18 完成，Codex 可跳过，但可打磨）
 
-1. **Esc 中断当前 turn** — ACP 有 `session/cancel` 方法（见 acp README），接入编辑器 Esc 键。注意 pi-tui 的 Esc 同时用于"关 overlay"，需要状态判断
-2. **会话切换** — session log 是 append-only JSONL，按目录列出历史会话（SelectList 选择器），选中后读 log 回放历史消息。"新对话另起"（ACP 只支持 fresh session，不支持 resume，官方 README 明说）
-3. **错误恢复** — ACP 子进程死亡自动重启 + 界面错误卡片（不崩溃）；网络超时处理
-4. **Ctrl+C 优雅退出** — 杀子进程、恢复终端状态（现在 ExitCode 处理糙）
-5. **工具卡片详情展开** — 按 Alt+[ / Alt-] 在工具块间跳转（抄 CodeWhale KEYBINDINGS.md L151），或做折叠展开
+1. ~~Esc 中断~~ 已实现（session/cancel）
+2. ~~会话切换~~ 已实现（Ctrl+R 选择器 + 历史回放 src/sessions.ts，新对话另起）
+3. ~~错误恢复~~ 已实现（自动重启≤3次+重放消息、全局异常捕获错误卡片）
+4. ~~Ctrl+C 优雅退出~~ 已实现（stdin-EOF→SIGTERM→SIGKILL 三级退出）
+5. ~~成本面板~~ 已实现（峰谷定价+token 明细状态栏）
+6. （可选打磨）工具卡片详情展开：Alt+[ / Alt-] 跳转（抄 CodeWhale KEYBINDINGS.md L151）
 
-### Week 3：发布
+### Week 3：发布（当前阶段，Codex 从这里开始）
 
 6. **npm 打包** — `npx dsh-tui` 一键跑；首次启动检测后端缺失并给指引（后端搭建步骤写进 onboarding 文案）
 7. **路径配置化** — main.ts 里 DEFAULT_ACP_CMD 现在是写死的 E 盘绝对路径，改成：配置文件（~/.dsh-tui.json）> 环境变量 > 自动探测（找得到 dsh 仓库就用）

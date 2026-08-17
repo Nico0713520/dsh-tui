@@ -1,8 +1,7 @@
 /**
  * dsh-tui — Terminal client for DeepSeek Harness.
- * Rendering: @earendil-works/pi-tui (MIT) — Markdown component with pi's
- *   defaultMarkdownTheme (ported from pi's test-themes.ts).
- * Backend: dsh ACP (JSON-RPC stdio) + session-log watching for tool activity.
+ * Rendering: @earendil-works/pi-tui (MIT) — Markdown, overlays, SelectList.
+ * Backend: dsh ACP (JSON-RPC stdio) + session-log watch for tool activity.
  * Policy/cost: ported from CodeWhale approval/policy.rs + pricing.rs (MIT).
  */
 import {
@@ -12,8 +11,8 @@ import {
 } from "@earendil-works/pi-tui"
 import { AcpClient, type AcpEvents } from "./acp.ts"
 import { SessionLogWatcher } from "./logwatch.ts"
-import { classifyStakes } from "./policy.ts"
-import { estimateCostUsd, type Usage } from "./policy.ts"
+import { classifyStakes, estimateCostUsd, type Usage } from "./policy.ts"
+import { listSessions, loadReplay } from "./sessions.ts"
 import { MARK_USER, MARK_TOOL, MARK_TOOL_ERR, STATUS_PREFIX, c, toolSummary } from "./theme.ts"
 
 const terminal = new ProcessTerminal()
@@ -23,7 +22,7 @@ const tui: TUI = new TuiMainScreen(terminal)
 const MODE = process.env.DSH_TUI_MODE ?? "echo"
 const MODEL = process.env.DSH_MODEL ?? "deepseek-v4-flash"
 const PERSIST_ROOT = process.env.DSH_PERSIST_ROOT ?? "E:\\Desktop\\deepseek\\dsh-tui\\.sessions-dshtui"
-const TOOL_CARDS = process.env.DSH_TOOL_CARDS !== "off" // degrade switch for the log side-channel
+const TOOL_CARDS = process.env.DSH_TOOL_CARDS !== "off"
 const DEFAULT_ACP_CMD = [
   "node",
   "E:\\Desktop\\deepseek\\refs-dsh\\packages\\examples\\acp-demo\\src\\bin.ts",
@@ -36,6 +35,7 @@ let busy = false
 let lastCtrlC = 0
 let sessionUsage: Usage = {}
 let sessionCost = 0
+let shuttingDown = false
 
 // ---------------------------------------------------------------- markdown theme (pi's default, ported)
 const mdTheme: MarkdownTheme = {
@@ -66,14 +66,15 @@ const editor = new Editor(tui, editorTheme)
 const status = new Text("")
 
 function setStatus(extra = "") {
+  const tok = sessionUsage.outputTokens ? `${c.dim(`${sessionUsage.inputTokens ?? 0}in/${sessionUsage.outputTokens}out`)}` : ""
   const cost = sessionCost > 0 ? ` ${c.dim("$" + sessionCost.toFixed(4))}` : ""
-  const left = ` dsh-tui ${c.dim("·")} ${MODE === "acp" ? c.blue(MODEL) : c.dim("echo")} ${c.dim("·")} ${busy ? c.yellow("working…") : c.green("ready")}${cost}`
+  const left = ` dsh-tui ${c.dim("·")} ${MODE === "acp" ? c.blue(MODEL) : c.dim("echo")} ${c.dim("·")} ${busy ? c.yellow("working…") : c.green("ready")}${tok ? " " + tok : ""}${cost}`
   status.setText(truncateToWidth(STATUS_PREFIX + left + (extra ? " " + c.dim(extra) : ""), terminal.columns) + "\x1b[0m")
 }
 
-tui.addChild(new Text(`${c.bold("dsh-tui")} ${c.dim("— DeepSeek Harness terminal client. Enter to send, Ctrl+C ×2 to exit.")}`))
+tui.addChild(new Text(`${c.bold("dsh-tui")} ${c.dim("— Enter send · Esc interrupt · Ctrl+R sessions · Ctrl+C ×2 exit")}`))
 
-// ---------------------------------------------------------------- streams (Markdown-rendered assistant)
+// ---------------------------------------------------------------- streams
 let streamMd: Markdown | null = null
 let streamText = ""
 function beginAssistant(): Markdown {
@@ -99,8 +100,54 @@ function addToolResult(text: string, isError: boolean) {
   transcript.addChild(new Text(`${isError ? MARK_TOOL_ERR : MARK_TOOL}${isError ? c.red(oneLine) : c.dim(oneLine.slice(0, 76))}`))
   tui.requestRender()
 }
+function addErrorCard(msg: string) {
+  transcript.addChild(new Text(c.red("⚠ ") + msg.replace(/\n/g, " ").slice(0, 120)))
+  tui.requestRender()
+}
 
-// ---------------------------------------------------------------- approval overlay (CodeWhale stakes model)
+// ---------------------------------------------------------------- session picker overlay (Ctrl+R)
+function showSessionPicker() {
+  const sessions = listSessions(PERSIST_ROOT, process.cwd())
+  if (!sessions.length) {
+    addErrorCard("no past sessions in this workspace yet")
+    return
+  }
+  const items = sessions.slice(0, 20).map((s) => {
+    const when = new Date(s.mtime).toLocaleString("MM-dd HH:mm")
+    const label = s.title || s.firstUserMsg || s.id.slice(0, 8)
+    return { id: s.id, primary: `${c.dim(when)} ${label.slice(0, 44)}` }
+  })
+  items.unshift({ id: "__new__", primary: c.green("+ new session") })
+  const list = new SelectList(items, tui)
+  list.onSelect = (item: any) => {
+    handle.hide()
+    if (item.id === "__new__") return
+    replaySession(item.id)
+  }
+  const box = new Container()
+  box.addChild(new Text(c.bold(c.cyan("Sessions")) + c.dim("  ↑↓ select · Enter replay · Esc close")))
+  box.addChild(new Text(""))
+  box.addChild(list)
+  const handle: OverlayHandle = tui.showOverlay(box, { width: 60, maxHeight: 16 })
+}
+
+function replaySession(id: string) {
+  const entries = loadReplay(PERSIST_ROOT, process.cwd(), id)
+  if (!entries.length) {
+    addErrorCard("session log unreadable or empty")
+    return
+  }
+  transcript.addChild(new Text(c.dim(`── replay ${id.slice(0, 8)} (${entries.length} entries) ──`)))
+  for (const e of entries) {
+    if (e.kind === "user") transcript.addChild(new Text(MARK_USER + e.text.replace(/\n/g, " ").slice(0, 100)))
+    else if (e.kind === "assistant") transcript.addChild(new Markdown(e.text, 1, 0, mdTheme))
+    else transcript.addChild(new Text(`${MARK_TOOL}${c.dim(e.text.slice(0, 76))}`))
+  }
+  transcript.addChild(new Text(c.dim(`── end replay · new messages start a fresh session ──`)))
+  tui.requestRender()
+}
+
+// ---------------------------------------------------------------- approval overlay
 function askApproval(toolCallId: string, optionIds: string[]): Promise<string> {
   return new Promise((resolve) => {
     const info = watcher.lookupCall(toolCallId)
@@ -168,9 +215,12 @@ const acp: AcpEvents = {
     }
   },
   onError(err) {
-    transcript.addChild(new Text(c.red("⚠ " + err)))
+    addErrorCard(err)
     busy = false
     setStatus()
+  },
+  onRestart(attempt) {
+    addErrorCard(`backend restarted (attempt ${attempt}), replaying your message`)
   },
   onPermission(toolCallId, optionIds, respond) {
     void askApproval(toolCallId, optionIds).then(respond)
@@ -208,7 +258,10 @@ async function send(text: string) {
   try {
     await client.prompt(text)
   } catch (e) {
-    acp.onError?.(String(e))
+    addErrorCard(String(e))
+    streamMd = null
+    busy = false
+    setStatus()
   }
 }
 
@@ -222,18 +275,39 @@ tui.addChild(editor)
 tui.addChild(status)
 tui.setFocus(editor)
 
+// ---------------------------------------------------------------- graceful shutdown
+function shutdown() {
+  if (shuttingDown) return
+  shuttingDown = true
+  try { watcher.stop() } catch {}
+  try { client?.close() } catch {}
+  try { tui.stop() } catch {}
+  process.exit(0)
+}
+process.on("uncaughtException", (err) => {
+  try { addErrorCard(`uncaught: ${err.message}`); shuttingDown = false } catch { shutdown() }
+})
+process.on("unhandledRejection", (reason) => {
+  try { addErrorCard(`unhandled: ${String(reason)}`) } catch { shutdown() }
+})
+
 // ---------------------------------------------------------------- keys (CodeWhale-style)
 tui.addInputListener((data) => {
   if (matchesKey(data, "ctrl+c")) {
     const now = Date.now()
-    if (now - lastCtrlC < 1500) {
-      watcher.stop()
-      client?.close()
-      tui.stop()
-      process.exit(0)
-    }
+    if (now - lastCtrlC < 1500) shutdown()
     lastCtrlC = now
     setStatus(c.yellow("(Ctrl+C again to exit)"))
+  } else if (matchesKey(data, "ctrl+r")) {
+    showSessionPicker()
+  } else if (matchesKey(data, "escape")) {
+    if (busy && client) {
+      void client.cancel().then(() => {
+        streamMd = null
+        busy = false
+        setStatus(c.dim("(interrupted)"))
+      })
+    }
   }
 })
 

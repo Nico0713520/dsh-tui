@@ -17,16 +17,20 @@ dsh is in developer preview with breaking changes expected. This client's dsh-co
 
 Re-test checklist after upgrading dsh: `node src/e2e-tools.ts` → `node src/e2e-perm.ts` → manual turn. If session-log format breaks, set `DSH_TOOL_CARDS=off` to degrade to cards-after-turn (side-channel off, ACP streaming unaffected).
 
-## Status: Phase 2 (Week 1 complete)
+## Status: Week 2 complete (Phase 2)
 
 - [x] pi-tui layout: transcript + Editor + status bar, CJK-safe
 - [x] Real dsh connection (ACP handshake, streaming replies, tool turns)
 - [x] Tool-call cards (live, via session-log watch) with degrade switch
 - [x] Approval overlay with CodeWhale-style stakes: routine / elevated / critical
 - [x] Markdown-rendered assistant replies (pi Markdown component + theme)
-- [x] Live cost panel (DeepSeek V4 peak/off-peak pricing, cache-hit aware)
-- [ ] Session switching, error recovery, Esc interrupt
-- [ ] npm packaging, cross-terminal testing, publish
+- [x] Live cost panel: DeepSeek V4 peak/off-peak pricing + token counts in status bar
+- [x] Session picker (Ctrl+R): list past sessions, replay history into transcript
+- [x] Esc interrupt: cancels in-flight turn via `session/cancel`
+- [x] Auto-restart: backend death replays the interrupted message (≤3 attempts)
+- [x] Error cards: model/network/uncaught errors render inline, never crash the TUI
+- [x] Graceful shutdown: kill ladder (stdin-EOF → SIGTERM → SIGKILL), Ctrl+C ×2
+- [ ] npm packaging, path configurability, cross-terminal testing, publish
 
 ## Run
 

@@ -7,13 +7,14 @@ export interface AcpEvents {
   onTurnEnd(): void
   onSession(id: string): void
   onError(msg: string): void
+  /** Backend died and was restarted; session state lost. */
+  onRestart?(attempt: number): void
   /** Permission request for a tool call; respond with one of optionIds. */
   onPermission?(toolCallId: string, optionIds: string[], respond: (optionId: string) => void): void
 }
 
 export interface AcpOptions {
   model?: string
-  /** Command that boots the dsh ACP server, e.g. ["node", "refs-dsh/packages/examples/acp-demo/src/bin.ts", "--config", "cordis.yml"] */
   command?: string[]
   events: AcpEvents
 }
@@ -30,6 +31,9 @@ export class AcpClient {
   private events: AcpEvents
   private model: string
   private command: string[]
+  private restarts = 0
+  private dead = false
+  private lastPrompt: string | null = null
 
   constructor(opts: AcpOptions) {
     this.events = opts.events
@@ -39,6 +43,7 @@ export class AcpClient {
 
   private ensure(): ChildProcess {
     if (this.proc) return this.proc
+    if (this.dead || !this.command.length) throw new Error("ACP server not configured")
     const [cmd, ...args] = this.command
     const proc = spawn(cmd, args, { stdio: ["pipe", "pipe", "inherit"] })
     this.proc = proc
@@ -48,6 +53,21 @@ export class AcpClient {
       this.proc = null
       for (const p of this.pending.values()) p.reject(new Error(`dsh ACP server exited (${code})`))
       this.pending.clear()
+      this.sessionId = null
+      // Auto-restart once per turn; surface to UI.
+      if (!this.dead && this.lastPrompt && this.restarts < 3) {
+        this.restarts++
+        this.events.onRestart?.(this.restarts)
+        // retry the interrupted prompt on the fresh server
+        const retry = this.lastPrompt
+        this.lastPrompt = null
+        setTimeout(() => { void this.prompt(retry!) }, 1000)
+      } else {
+        this.events.onError(`backend exited (code ${code})`)
+      }
+    })
+    proc.on("error", (err) => {
+      this.events.onError(`failed to start backend: ${err.message}`)
     })
     return proc
   }
@@ -90,26 +110,33 @@ export class AcpClient {
     this.proc?.stdin?.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n")
   }
 
-  private call(method: string, params: any): Promise<any> {
+  private call(method: string, params: any, timeoutMs = 180_000): Promise<any> {
     const proc = this.ensure()
     const id = this.nextId++
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
+      const timer = setTimeout(() => {
+        this.pending.delete(id)
+        reject(new Error(`ACP ${method} timed out after ${timeoutMs / 1000}s`))
+      }, timeoutMs)
+      this.pending.set(id, {
+        resolve: (v) => { clearTimeout(timer); resolve(v) },
+        reject: (e) => { clearTimeout(timer); reject(e) },
+      })
       proc.stdin!.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n")
     })
   }
 
   private async ensureSession(): Promise<string> {
     if (this.sessionId) return this.sessionId
-    const version = await this.call("initialize", {
+    await this.call("initialize", {
       protocolVersion: 1,
       clientCapabilities: {},
-      clientInfo: { name: "dsh-tui", version: "0.0.1" },
-    }).catch(() => ({}))
+      clientInfo: { name: "dsh-tui", version: "0.0.2" },
+    }, 30_000)
     const res = await this.call("session/new", {
       cwd: process.cwd(),
       mcpServers: [],
-    })
+    }, 30_000)
     this.sessionId = res.sessionId
     this.events.onSession(res.sessionId)
     return res.sessionId
@@ -117,39 +144,36 @@ export class AcpClient {
   private sessionId: string | null = null
 
   async prompt(text: string): Promise<void> {
+    this.lastPrompt = text
     const sid = await this.ensureSession()
     await this.call("session/prompt", {
       sessionId: sid,
       prompt: [{ type: "text", text }],
     })
+    this.lastPrompt = null
+    this.restarts = 0
     this.events.onTurnEnd()
   }
 
+  /** Cancel in-flight work (Esc interrupt). */
+  async cancel(): Promise<void> {
+    if (!this.sessionId) return
+    try {
+      await this.call("session/cancel", { sessionId: this.sessionId, reason: "user interrupted" }, 10_000)
+    } catch {
+      // no in-flight prompt is a no-op on the server side; ignore errors
+    }
+    this.lastPrompt = null
+  }
+
+  /** Graceful shutdown: end stdin, escalate kill, caller restores TUI. */
   close() {
-    try { this.proc?.stdin?.end() } catch {}
-    try { this.proc?.kill() } catch {}
+    this.dead = true
+    const proc = this.proc
+    if (!proc) return
+    try { proc.stdin?.end() } catch {}
+    const kill = setTimeout(() => { try { proc.kill("SIGKILL") } catch {} }, 3000)
+    try { proc.kill() } catch {}
+    proc.on("exit", () => clearTimeout(kill))
   }
-}
-
-function pAllowOption(options: any): string {
-  const list = Array.isArray(options) ? options : []
-  for (const o of list) if (typeof o?.optionId === "string" && /allow/i.test(o.optionId)) return o.optionId
-  return list[0]?.optionId ?? "allow"
-}
-
-function extractTitle(options: any): string {
-  const list = Array.isArray(options) ? options : []
-  for (const o of list) {
-    if (o?.kind === "title" || o?.type === "title") return o.content?.text ?? o.name ?? "Permission"
-  }
-  return "Tool permission"
-}
-
-function extractDetail(options: any): string {
-  const list = Array.isArray(options) ? options : []
-  for (const o of list) {
-    const t = o?.content?.text ?? o?.highlight ?? ""
-    if (t && (o?.kind !== "title" && o?.type !== "title")) return String(t)
-  }
-  return ""
 }
