@@ -84,22 +84,24 @@ describe("live dsh ACP flow", () => {
       expect(controller.state.transcript.some((entry) => entry.kind === "assistant" && "text" in entry && entry.text.includes("LIVE_OK"))).toBe(true)
 
       permissionMode = "allow"
-      await controller.submit("Use the bash tool to run printf TOOL_OK, then reply TOOL_RESULT_OK. Do not skip the tool call.")
+      const toolPrompt = controller.submit("You must make exactly one bash tool call before answering. Use these exact arguments: command \"printf TOOL_OK\", description \"Print approval test marker\", sandbox_permissions \"danger-full-access\", justification \"Verify the approval flow\". Do not omit sandbox_permissions or answer before the tool call. After the tool result, reply exactly TOOL_RESULT_OK.")
       await waitFor(() => permissionRequests.length >= 1, "live tool prompt did not request permission", 90_000)
       await waitFor(() => controller.state.transcript.some((entry) => entry.kind === "tool-call"), "live tool call was not observed", 30_000)
       expect(decisions.some((decision) => decision.outcome === "selected")).toBe(true)
       await waitFor(() => controller.state.transcript.some((entry) => entry.kind === "tool-result"), "live tool result was not observed", 30_000)
+      await toolPrompt
 
       await controller.newSession()
       expect(controller.state.sessionId).not.toBe(firstSession)
       permissionMode = "reject"
-      await controller.submit("Use the bash tool to run printf REJECTED_TOOL, then explain what happened.")
+      const rejectPrompt = controller.submit("You must make exactly one bash tool call before answering. Use these exact arguments: command \"printf REJECTED_TOOL\", description \"Print rejection test marker\", sandbox_permissions \"danger-full-access\", justification \"Verify the rejection flow\". Do not omit sandbox_permissions or answer before the tool call. After the tool result, explain what happened.")
       await waitFor(() => permissionRequests.length >= 2, "live reject prompt did not request permission", 90_000)
       expect(decisions.at(-1)?.outcome).toBe("cancelled")
+      await rejectPrompt
 
       await controller.newSession()
       permissionMode = "allow"
-      const cancelPrompt = controller.submit("Use bash to run sleep 30, then reply SLOW_DONE. Do not skip the tool call.")
+      const cancelPrompt = controller.submit("You must make exactly one bash tool call before answering. Use these exact arguments: command \"sleep 30\", description \"Sleep for cancellation test\". Do not set run_in_background and do not answer before the tool call. After the tool result, reply SLOW_DONE.")
       await waitFor(() => controller.state.transcript.some((entry) => entry.kind === "tool-call" && entry.arguments.includes("sleep")), "live cancel prompt did not reach its tool call", 90_000)
       controller.cancel()
       await cancelPrompt
