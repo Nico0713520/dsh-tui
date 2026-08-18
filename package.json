@@ -1,8 +1,22 @@
 {
-  "name": "dsh-tui",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "@nico0713520/dsh-tui",
+  "version": "0.1.0",
+  "description": "A safe, readable terminal client for DeepSeek Harness ACP",
+  "main": "dist/main.js",
+  "bin": {
+    "dsh-tui": "bin/dsh-tui.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "config",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
   "scripts": {
     "start": "node src/main.ts",
     "build": "tsdown",
@@ -19,12 +33,27 @@
     "check": "npm run check:source && npm run publint && npm run pack:check",
     "prepack": "npm run check:source"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["deepseek", "harness", "acp", "tui", "terminal"],
+  "author": "nico0713520",
+  "license": "MIT",
   "type": "module",
   "dependencies": {
-    "@earendil-works/pi-tui": "^0.84.2"
+    "@deepseek-ai/dsh-acp-demo": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-bash-sandbox": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-compaction-basic": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-fs-observation-policy": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-fs-sandbox": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-llm-deepseek": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-pwsh-local": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-pwsh-sandbox": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-sandbox-local": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-sandbox-policy": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-subprocess-local": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-token-meter": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-tool-fs": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-tool-pwsh": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-user-approval": "0.1.0-rc.7",
+    "@earendil-works/pi-tui": "0.84.2"
   },
   "devDependencies": {
     "@types/node": "22.20.0",

@@ -1,5 +1,8 @@
-import { loadConfig } from "./config.ts"
-import { runApp } from "./app.ts"
+import { runCli } from "./cli.ts"
 
-const config = loadConfig(process.argv.slice(2), process.env)
-process.exitCode = await runApp(config)
+try {
+  process.exitCode = await runCli()
+} catch (error) {
+  process.stderr.write(`dsh-tui: ${error instanceof Error ? error.message : String(error)}\n`)
+  process.exitCode = 1
+}
