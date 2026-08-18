@@ -4,9 +4,11 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawn as spawnPty } from "node-pty"
+import { ensurePtyHelper } from "./ensure-pty-helper.mjs"
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)))
 const temp = mkdtempSync(join(tmpdir(), "dsh-tui-install-"))
+ensurePtyHelper(root)
 
 function command(args) {
   return execFileSync("npm", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })

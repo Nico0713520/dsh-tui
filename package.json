@@ -22,10 +22,10 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --deny-warnings src tests scripts",
-    "test": "vitest run",
+    "test": "node scripts/ensure-pty-helper.mjs && vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
-    "test:pty": "vitest run tests/pty",
+    "test:pty": "node scripts/ensure-pty-helper.mjs && vitest run tests/pty",
     "check:source": "npm run lint && npm run typecheck && npm run test && npm run build",
     "publint": "publint",
     "pack:check": "node scripts/check-pack.mjs",
@@ -33,7 +33,13 @@
     "check": "npm run check:source && npm run publint && npm run pack:check",
     "prepack": "npm run check:source"
   },
-  "keywords": ["deepseek", "harness", "acp", "tui", "terminal"],
+  "keywords": [
+    "deepseek",
+    "harness",
+    "acp",
+    "tui",
+    "terminal"
+  ],
   "author": "nico0713520",
   "license": "MIT",
   "type": "module",
