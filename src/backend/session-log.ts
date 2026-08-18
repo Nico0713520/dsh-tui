@@ -124,12 +124,24 @@ export class SessionLogReader {
   private offset = 0
   private decoder = new StringDecoder("utf8")
   private partialLine = ""
-  private callNames = new Map<string, string>()
+  private callNames = new Map<string, { name: string; arguments: string }>()
   private options: SessionLogWatchOptions | null = null
 
   constructor(options: { pollIntervalMs?: number; readChunkSize?: number } = {}) {
     this.pollIntervalMs = options.pollIntervalMs ?? 250
     this.readChunkSize = options.readChunkSize ?? 64 * 1024
+  }
+
+  lookupCall(callId: string): { name: string; arguments: string } | undefined {
+    return this.callNames.get(callId)
+  }
+
+  listHistory(persistRoot: string, cwd: string): Promise<SessionInfo[]> {
+    return listHistory(persistRoot, cwd)
+  }
+
+  loadHistory(persistRoot: string, cwd: string, sessionId: string): Promise<HistoryEntry[]> {
+    return loadHistory(persistRoot, cwd, sessionId)
   }
 
   watch(options: SessionLogWatchOptions): void {
@@ -223,14 +235,14 @@ function isMissing(error: unknown): boolean {
   return isRecord(error) && error.code === "ENOENT"
 }
 
-function parseEvent(record: unknown, callNames: Map<string, string>): SessionLogEvent | null {
+function parseEvent(record: unknown, callNames: Map<string, { name: string; arguments: string }>): SessionLogEvent | null {
   if (!isRecord(record) || typeof record.type !== "string") return null
   const data = isRecord(record.data) ? record.data : {}
   if (record.type === "tool/call") {
     const callId = typeof data.callId === "string" ? data.callId : ""
     const name = typeof data.name === "string" && data.name ? data.name : "tool"
     const args = stringArgument(data.arguments)
-    if (callId) callNames.set(callId, name)
+    if (callId) callNames.set(callId, { name, arguments: args })
     return { kind: "tool-call", callId, name, arguments: args }
   }
   if (record.type === "tool/result") {
@@ -243,7 +255,7 @@ function parseEvent(record: unknown, callNames: Map<string, string>): SessionLog
     return {
       kind: "tool-result",
       callId,
-      name: callNames.get(callId) ?? "tool",
+      name: callNames.get(callId)?.name ?? "tool",
       text: result ? textBlocks(result.content) : "",
       isError: result?.isError === true,
     }

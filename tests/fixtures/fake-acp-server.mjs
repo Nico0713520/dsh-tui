@@ -14,10 +14,6 @@ function result(id, value) {
   send({ id, result: value })
 }
 
-function error(id, message) {
-  send({ id, error: { code: -1, message } })
-}
-
 function assistant(text) {
   send({
     method: "session/update",

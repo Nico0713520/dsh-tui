@@ -278,7 +278,7 @@ export class AcpClient {
   }
 
   private call(method: string, params: unknown): Promise<unknown> {
-    const child = this.ensureProcess()
+    this.ensureProcess()
     const id = this.nextId++
     const timeoutMs = this.timeouts[method] ?? 30_000
     return new Promise((resolve, reject) => {
