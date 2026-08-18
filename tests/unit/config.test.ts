@@ -39,6 +39,19 @@ describe("loadConfig", () => {
     expect(linux.persistRoot).toBe("/tmp/state/dsh-tui/sessions")
   })
 
+  it("defaults to the real ACP client and keeps Echo explicit", () => {
+    expect(loadConfig([], {}, "linux").mode).toBe("acp")
+    expect(loadConfig(["--echo"], {}, "linux").mode).toBe("echo")
+    expect(loadConfig(["--mode", "echo"], {}, "linux").mode).toBe("echo")
+    expect(loadConfig(["--mode", "acp"], { DSH_TUI_MODE: "echo" }, "linux").mode).toBe("acp")
+  })
+
+  it("rejects ambiguous tool-card values", () => {
+    expect(loadConfig([], { DSH_TOOL_CARDS: "off" }, "linux").toolCards).toBe(false)
+    expect(loadConfig([], { DSH_TOOL_CARDS: "true" }, "linux").toolCards).toBe(true)
+    expect(() => loadConfig([], { DSH_TOOL_CARDS: "sometimes" }, "linux")).toThrow(/tool-cards/i)
+  })
+
   it("supports echo mode and rejects malformed configuration", () => {
     expect(loadConfig(["--echo"], {}, "linux").mode).toBe("echo")
     expect(() => loadConfig([], { DSH_TUI_MODE: "bogus" }, "linux")).toThrow(/mode/i)

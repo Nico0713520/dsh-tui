@@ -9,7 +9,7 @@ Usage:
   dsh-tui [options]
 
 Options:
-  --echo                         Run without a live ACP backend
+  --echo                         Run the offline Echo smoke/demo instead of ACP
   --mode <echo|acp>              Select the backend mode
   --model <name>                 Model name for ACP and pricing display
   --cwd <path>                   Working directory for the backend

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { classifyRisk, classifyShellCommand, classifyStakes } from "../../src/policy.ts"
+import * as policy from "../../src/policy.ts"
 
 describe("tool policy", () => {
   it("classifies only complete, exact read-only commands as benign", () => {
@@ -25,5 +26,9 @@ describe("tool policy", () => {
     expect(classifyRisk("mystery_tool", {})).toBe("destructive")
     expect(classifyRisk("read_file", { path: "README.md" })).toBe("benign")
     expect(classifyStakes("mystery_tool", {})).toBe("critical")
+  })
+
+  it("keeps pricing out of the approval policy module", () => {
+    expect(policy).not.toHaveProperty("estimateCostUsd")
   })
 })

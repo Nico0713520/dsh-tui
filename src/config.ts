@@ -72,7 +72,7 @@ export function loadConfig(
   platform: NodeJS.Platform = process.platform,
 ): AppConfig {
   const parsed = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true, strict: true }).values as ParsedValues
-  const modeValue = parsed.echo === true ? "echo" : parsed.mode ?? env.DSH_TUI_MODE ?? "echo"
+  const modeValue = parsed.echo === true ? "echo" : parsed.mode ?? env.DSH_TUI_MODE ?? "acp"
   if (modeValue !== "echo" && modeValue !== "acp") {
     throw new Error(`mode must be "echo" or "acp", received ${JSON.stringify(modeValue)}`)
   }
@@ -81,7 +81,10 @@ export function loadConfig(
   const cwd = resolve(nonEmpty(parsed.cwd ?? env.DSH_CWD ?? process.cwd(), "cwd")!)
   const persistRoot = resolve(nonEmpty(parsed["persist-root"] ?? env.DSH_PERSIST_ROOT ?? defaultPersistRoot(env, platform), "persist root")!)
   const toolCardsValue = parsed["tool-cards"] ?? env.DSH_TOOL_CARDS ?? "on"
-  const toolCards = toolCardsValue !== "off" && toolCardsValue !== "false"
+  if (!["on", "off", "true", "false"].includes(toolCardsValue)) {
+    throw new Error(`tool-cards must be on, off, true, or false; received ${JSON.stringify(toolCardsValue)}`)
+  }
+  const toolCards = toolCardsValue === "on" || toolCardsValue === "true"
   const commandValue = parsed["backend-command-json"] ?? env.DSH_ACP_CMD_JSON
   const backendCommand = parseCommand(commandValue)
 

@@ -1,6 +1,5 @@
 /**
- * Approval risk policy + cost model, ported from CodeWhale
- * (crates/tui/src/tui/approval/policy.rs + crates/tui/src/pricing.rs, MIT).
+ * Approval risk policy, ported from CodeWhale.
  * UI-free classification so the approval overlay renders decisions it doesn't own.
  */
 
@@ -65,31 +64,4 @@ export function classifyStakes(name: string, args: unknown): ApprovalStakes {
   } catch {}
   if (cat === "unknown") return "critical"
   return "elevated"
-}
-
-// ------------------------------------------------------------------ pricing (CodeWhale pricing.rs, verified 2026-08-17)
-/** Per-1M-token USD rates (cache-hit, cache-miss, output). Off-peak = half of peak. */
-const DEEPSEEK_RATES: Record<string, { peak: [number, number, number] }> = {
-  "deepseek-v4-flash": { peak: [0.014, 0.44, 1.32] },
-  "deepseek-v4-pro": { peak: [0.044, 1.32, 3.96] },
-}
-
-/** DeepSeek peak = UTC 12:30-16:30 (CST 20:30-00:30), per official pricing page. */
-function isPeak(d = new Date()): boolean {
-  const t = d.getUTCHours() * 60 + d.getUTCMinutes()
-  return t >= 750 && t < 990
-}
-
-export interface Usage { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number }
-
-export function estimateCostUsd(model: string, usage: Usage): number {
-  const rates = DEEPSEEK_RATES[model]
-  if (!rates) return 0
-  const f = isPeak() ? 1 : 0.5
-  const [hit, miss, out] = rates.peak
-  const cached = usage.cacheReadTokens ?? 0
-  const input = usage.inputTokens ?? 0
-  // cacheRead is a subset of input (billed at hit rate); the rest at miss rate.
-  const cost = ((cached / 1e6) * hit * f) + ((Math.max(0, input - cached) / 1e6) * miss * f) + ((usage.outputTokens ?? 0) / 1e6) * out * f
-  return Math.round(cost * 1e4) / 1e4
 }
