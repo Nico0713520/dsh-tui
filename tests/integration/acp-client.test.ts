@@ -1,0 +1,113 @@
+import { fileURLToPath } from "node:url"
+import { describe, expect, it } from "vitest"
+import { AcpClient, type AcpClientEvents, type PermissionDecision } from "../../src/backend/acp-client.ts"
+
+const fixture = fileURLToPath(new URL("../fixtures/fake-acp-server.mjs", import.meta.url))
+
+function createEvents(overrides: Partial<AcpClientEvents> = {}): AcpClientEvents & {
+  chunks: string[]
+  exits: Array<{ outcomeUnknown: boolean }>
+  diagnostics: string[]
+} {
+  const events = {
+    chunks: [] as string[],
+    exits: [] as Array<{ outcomeUnknown: boolean }>,
+    diagnostics: [] as string[],
+    onAssistantText(text: string) { events.chunks.push(text) },
+    onSessionChanged() {},
+    onDiagnostic(message: string) { events.diagnostics.push(message) },
+    async onPermission(): Promise<PermissionDecision> { return { outcome: "cancelled" } },
+    onBackendExit(info: { outcomeUnknown: boolean }) { events.exits.push({ outcomeUnknown: info.outcomeUnknown }) },
+    ...overrides,
+  }
+  return events
+}
+
+function client(scenario: string, events: AcpClientEvents, timeouts?: Record<string, number>) {
+  return new AcpClient({
+    command: [process.execPath, fixture],
+    cwd: process.cwd(),
+    events,
+    env: { ...process.env, FAKE_ACP_SCENARIO: scenario },
+    ...(timeouts === undefined ? {} : { timeouts }),
+  })
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  const started = Date.now()
+  while (!predicate()) {
+    if (Date.now() - started > 1_000) throw new Error("test condition did not become true")
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
+
+describe("AcpClient", () => {
+  it("initializes once, creates a real session, and streams assistant text", async () => {
+    const events = createEvents()
+    const acp = client("normal", events)
+    await acp.start()
+    const sessionId = await acp.newSession()
+    const result = await acp.prompt("hello")
+
+    expect(sessionId).toBe("fake-session-1")
+    expect(result.stopReason).toBe("end_turn")
+    expect(events.chunks).toEqual(["hello"])
+    expect(acp.activeSessionId).toBe(sessionId)
+    await acp.close()
+  })
+
+  it("rejects a second prompt before writing it", async () => {
+    const acp = client("delayed", createEvents())
+    const first = acp.prompt("first")
+    await expect(acp.prompt("second")).rejects.toThrow("A prompt is already in flight")
+    await waitFor(() => acp.activeSessionId !== null)
+    acp.cancel()
+    await expect(first).resolves.toMatchObject({ stopReason: "cancelled" })
+    await acp.close()
+  })
+
+  it("sends cancellation as a notification and settles the original prompt", async () => {
+    const events = createEvents()
+    const acp = client("delayed", events)
+    const prompt = acp.prompt("interrupt me")
+    await waitFor(() => acp.activeSessionId !== null)
+    expect(acp.isPromptInFlight).toBe(true)
+    acp.cancel()
+    await expect(prompt).resolves.toEqual({ stopReason: "cancelled" })
+    expect(events.chunks).toEqual(["cancelled"])
+    await acp.close()
+  })
+
+  it("fails closed when the permission callback selects an unknown option", async () => {
+    const events = createEvents({
+      async onPermission(): Promise<PermissionDecision> {
+        return { outcome: "selected", optionId: "not-offered" }
+      },
+    })
+    const acp = client("permission", events)
+    await expect(acp.prompt("permission")).resolves.toMatchObject({ stopReason: "cancelled" })
+    expect(events.chunks).toEqual(["cancelled"])
+    await acp.close()
+  })
+
+  it("rejects pending work and reports unknown outcome when the backend exits", async () => {
+    const events = createEvents()
+    const acp = client("forced-exit", events, { "session/prompt": 500 })
+    await expect(acp.prompt("may have side effects")).rejects.toThrow(/exited|unknown/i)
+    expect(events.exits).toEqual([{ outcomeUnknown: true }])
+    expect(acp.activeSessionId).toBeNull()
+    await acp.close()
+  })
+
+  it("closes a delayed backend without leaving the caller waiting", async () => {
+    const acp = client("delayed", createEvents())
+    const prompt = acp.prompt("hold")
+    const settled = prompt.then(
+      () => ({ ok: true as const }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+    await waitFor(() => acp.activeSessionId !== null)
+    await expect(acp.close()).resolves.toBeUndefined()
+    await expect(settled).resolves.toMatchObject({ ok: false })
+  })
+})
