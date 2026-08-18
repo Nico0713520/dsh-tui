@@ -4,7 +4,20 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node src/main.ts"
+    "start": "node src/main.ts",
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint --deny-warnings src tests scripts",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:pty": "vitest run tests/pty",
+    "check:source": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "publint": "publint",
+    "pack:check": "node scripts/check-pack.mjs",
+    "install:check": "node scripts/check-install.mjs",
+    "check": "npm run check:source && npm run publint && npm run pack:check",
+    "prepack": "npm run check:source"
   },
   "keywords": [],
   "author": "",
@@ -12,5 +25,14 @@
   "type": "module",
   "dependencies": {
     "@earendil-works/pi-tui": "^0.84.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.0",
+    "node-pty": "1.1.0",
+    "oxlint": "1.76.0",
+    "publint": "0.3.21",
+    "tsdown": "0.22.2",
+    "typescript": "6.0.3",
+    "vitest": "4.1.8"
   }
 }

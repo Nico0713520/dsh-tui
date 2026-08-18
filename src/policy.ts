@@ -8,6 +8,18 @@
 export type ToolCategory = "safe" | "file-write" | "shell" | "network" | "unknown"
 export type ApprovalStakes = "routine" | "elevated" | "critical"
 
+const SHELL_META = /(?:&&|\|\||[;|<>`]|\$\(|\r|\n|&)/
+const READ_ONLY_COMMANDS = [
+  /^(?:node|npm|pnpm|python|python3|pip|pip3)\s+(?:--version|-v)\s*$/i,
+  /^git\s+(?:status|diff|log|show|blame)(?:\s+[^;&|<>`]*)?\s*$/i,
+]
+
+export function classifyShellCommand(command: string): "benign" | "destructive" {
+  const value = command.trim()
+  if (!value || SHELL_META.test(value)) return "destructive"
+  return READ_ONLY_COMMANDS.some((pattern) => pattern.test(value)) ? "benign" : "destructive"
+}
+
 const FILE_WRITE = new Set(["write", "edit", "write_file", "edit_file", "apply_patch"])
 const NETWORK = new Set(["web_run", "web_search", "fetch_url", "registry_sync"])
 const SHELL = new Set(["bash", "Bash", "exec_shell", "pwsh", "task_shell_start", "task_shell_wait"])
@@ -30,10 +42,11 @@ export function classifyRisk(name: string, args: unknown): "benign" | "destructi
     return "destructive"
   }
   if (cat === "shell") {
-    // Conservative: only a short allowlist of provably read-only commands is benign.
     try {
-      const cmd = String((args as any)?.command ?? "")
-      if (cmd && /^(node|npm|pnpm|git|python|pip)\s+(--version|-v|status|log|diff)/i.test(cmd.trim())) return "benign"
+      const command = typeof args === "object" && args !== null
+        ? (args as Record<string, unknown>).command
+        : undefined
+      if (typeof command === "string" && classifyShellCommand(command) === "benign") return "benign"
     } catch {}
     return "destructive"
   }
