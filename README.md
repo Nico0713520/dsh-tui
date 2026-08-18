@@ -12,7 +12,7 @@ dsh-tui --echo
 `--echo` needs no API key and verifies the install and TTY. To connect to dsh `0.1.0-rc.7`:
 
 ```bash
-export DEEPSEEK_API_KEY="your-key"
+# Set DEEPSEEK_API_KEY in your shell first.
 dsh-tui --mode acp --model deepseek-v4-flash
 ```
 

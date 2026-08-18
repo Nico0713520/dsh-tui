@@ -43,7 +43,7 @@ npx --yes @nico0713520/dsh-tui@0.1.0 --echo
 ACP 模式需要用户在自己的环境中提供 `DEEPSEEK_API_KEY`：
 
 ```bash
-export DEEPSEEK_API_KEY="your-key"
+# Set DEEPSEEK_API_KEY in the current shell first.
 npx --yes @nico0713520/dsh-tui@0.1.0 --mode acp --model deepseek-v4-flash
 ```
 

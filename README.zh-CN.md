@@ -12,7 +12,7 @@ dsh-tui --echo
 `--echo` 不需要 API key，用于确认终端和安装正常。连接 DeepSeek Harness：
 
 ```bash
-export DEEPSEEK_API_KEY="你的 key"
+# 先在当前 shell 中设置 DEEPSEEK_API_KEY。
 dsh-tui --mode acp --model deepseek-v4-flash
 ```
 
