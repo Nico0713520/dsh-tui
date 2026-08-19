@@ -304,17 +304,17 @@ Commit: `feat: expose live turn state and preserve startup input`
 - Consumes: monotonically extending assistant text or a replacement after reconciliation.
 - Produces: visually equivalent stable Markdown blocks plus one mutable active tail through the controller/view seam.
 
-- [ ] **Step 1: Write a failing view-seam test for append-only parsing**
+- [x] **Step 1: Write a failing view-seam test for append-only parsing**
 
 Inject a counted Markdown factory into the streaming view module, append a paragraph, a blank line, a fenced code block split across updates, and a final paragraph. Assert frozen blocks are not reparsed when only the tail grows and the concatenated source remains the exact input.
 
-- [ ] **Step 2: Run the test and verify red**
+- [x] **Step 2: Run the test and verify red**
 
 Run: `npx vitest run tests/unit/app-view.test.ts -t "reparses only the active Markdown tail"`
 
 Expected: FAIL because the streaming Markdown module does not exist.
 
-- [ ] **Step 3: Implement the append-only scanner and view adapter**
+- [x] **Step 3: Implement the append-only scanner and view adapter**
 
 Expose one small module interface:
 
@@ -330,15 +330,15 @@ export function createStreamingMarkdownView(options: { markdown(text: string): M
 
 Scan only newly complete lines, freeze at blank-line boundaries outside triple-backtick/tilde fences and `$$` display math, reset when the incoming text is not a prefix, keep stable Markdown instances immutable, and update only one tail instance while text extends.
 
-- [ ] **Step 4: Replace the single mutable partial Markdown in `AppView`**
+- [x] **Step 4: Replace the single mutable partial Markdown in `AppView`**
 
 Keep committed transcript caching unchanged, insert the stream element where `partialAssistant` currently lives, reset it after commit/session reset, sanitize text before passing it to the stream, and rely on pi-tui's ordinary render coalescing.
 
-- [ ] **Step 5: Add equivalence and linear-growth tests**
+- [x] **Step 5: Add equivalence and linear-growth tests**
 
 Cover headings, paragraphs, lists, CJK text, split fences, split display math, final ACP replacement, shrinking text, and 200 appended blocks. Assert counted source bytes parsed remain below a fixed linear bound derived from the fixture, not from the implementation.
 
-- [ ] **Step 6: Run checks and commit**
+- [x] **Step 6: Run checks and commit**
 
 Run: `npx vitest run tests/unit/app-view.test.ts && npm run typecheck`
 

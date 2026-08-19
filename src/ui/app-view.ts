@@ -19,6 +19,7 @@ import type { RunMode } from "../config.ts"
 import { sanitizeTerminalText, singleLine } from "../text.ts"
 import { c, markdownTheme, MARK_TOOL, MARK_TOOL_ERR, MARK_USER, selectTheme, STATUS_PREFIX, toolSummary } from "./theme.ts"
 import { showModalList } from "./modal-list.ts"
+import { createStreamingMarkdownView } from "./streaming-markdown.ts"
 
 export interface ViewActions {
   onSubmit(text: string): void
@@ -69,7 +70,9 @@ export class AppView implements ControllerView {
   readonly tui: TUI = new TuiMainScreen(this.terminal)
   private readonly transcript = new Container()
   private readonly committedTranscript = new Container()
-  private readonly partialAssistant = new Markdown("", 1, 0, markdownTheme)
+  private readonly partialAssistant = createStreamingMarkdownView({
+    markdown: (text) => new Markdown(text, 1, 0, markdownTheme),
+  })
   private readonly scroller = new ScrollView(this.transcript, { follow: "end" })
   private readonly header = new Text("")
   private readonly status = new Text("")
@@ -94,7 +97,7 @@ export class AppView implements ControllerView {
     }
     this.editor = new Editor(this.tui, editorTheme)
     this.transcript.addChild(this.committedTranscript)
-    this.transcript.addChild(this.partialAssistant)
+    this.transcript.addChild(this.partialAssistant.element)
     this.tui.addChild(this.header)
     this.tui.addChild(this.scroller)
     this.tui.addChild(this.editor)

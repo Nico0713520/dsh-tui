@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
 import { visibleWidth } from "@earendil-works/pi-tui"
+import type { Component } from "@earendil-works/pi-tui"
 import type { AppState } from "../../src/controller.ts"
 import { headerText, statusText, toolResultText } from "../../src/ui/app-view.ts"
+import { createStreamingMarkdownView } from "../../src/ui/streaming-markdown.ts"
 
 const state: AppState = {
   phase: "ready",
@@ -18,6 +20,78 @@ const state: AppState = {
 }
 
 describe("TUI presentation", () => {
+  it("reparses only the active Markdown tail while stable blocks keep their identity", () => {
+    let parsedBytes = 0
+    class CountedMarkdown implements Component {
+      constructor(private text: string) { parsedBytes += text.length }
+      setText(text: string): void {
+        this.text = text
+        parsedBytes += text.length
+      }
+      render(): string[] { return [this.text] }
+      invalidate(): void {}
+    }
+    const stream = createStreamingMarkdownView({ markdown: (text) => new CountedMarkdown(text) })
+
+    stream.setText("First paragraph.\n\n```ts\nconst value = 1\n")
+    const firstStable = stream.element.children[0]
+    const childrenBeforeTailGrowth = stream.element.children.length
+    stream.setText("First paragraph.\n\n```ts\nconst value = 1\nconst next = 2\n")
+
+    expect(stream.text).toBe("First paragraph.\n\n```ts\nconst value = 1\nconst next = 2\n")
+    expect(stream.element.children[0]).toBe(firstStable)
+    expect(stream.element.children).toHaveLength(childrenBeforeTailGrowth)
+
+    stream.setText(`${stream.text}\`\`\`\n\nLast paragraph.`)
+    expect(stream.element.children.length).toBeGreaterThan(childrenBeforeTailGrowth)
+    expect(parsedBytes).toBeLessThan(220)
+  })
+
+  it("keeps fences and display math active until they close and resets on replacement", () => {
+    class LiteralMarkdown implements Component {
+      constructor(private text: string) {}
+      setText(text: string): void { this.text = text }
+      render(): string[] { return [this.text] }
+      invalidate(): void {}
+    }
+    const stream = createStreamingMarkdownView({ markdown: (text) => new LiteralMarkdown(text) })
+
+    stream.setText("```ts\n\ninside fence\n")
+    expect(stream.element.children).toHaveLength(1)
+    stream.setText(`${stream.text}\`\`\`\n\n$$\n\ninside math\n`)
+    expect(stream.element.children).toHaveLength(2)
+    stream.setText(`${stream.text}$$\n\n尾部`)
+    expect(stream.element.children.length).toBeGreaterThan(2)
+    expect(stream.element.render(80).join("")).toBe(stream.text)
+
+    stream.setText("replacement")
+    expect(stream.text).toBe("replacement")
+    expect(stream.element.children).toHaveLength(1)
+    expect(stream.element.render(80).join("")).toBe("replacement")
+  })
+
+  it("keeps block-heavy stream parsing growth linear", () => {
+    let parsedBytes = 0
+    class CountedMarkdown implements Component {
+      constructor(private text: string) { parsedBytes += text.length }
+      setText(text: string): void {
+        this.text = text
+        parsedBytes += text.length
+      }
+      render(): string[] { return [this.text] }
+      invalidate(): void {}
+    }
+    const stream = createStreamingMarkdownView({ markdown: (text) => new CountedMarkdown(text) })
+    let source = ""
+    for (let index = 0; index < 200; index += 1) {
+      source += `Block ${index}\n\n`
+      stream.setText(source)
+    }
+
+    expect(stream.text).toBe(source)
+    expect(parsedBytes).toBeLessThan(source.length * 2)
+  })
+
   it("keeps header copy within narrow terminal widths", () => {
     expect(visibleWidth(headerText(48))).toBeLessThanOrEqual(48)
     expect(visibleWidth(headerText(64))).toBeLessThanOrEqual(64)
