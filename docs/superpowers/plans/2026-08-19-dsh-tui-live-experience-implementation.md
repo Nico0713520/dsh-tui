@@ -56,7 +56,7 @@
 - Consumes: arbitrary `Buffer | string` chunks from child fd 3.
 - Produces: `DshLiveRecord`, `LiveRecordDecoder.push(chunk)`, `LiveRecordDecoder.end()`, and one bounded diagnostic callback.
 
-- [ ] **Step 1: Write a failing decoder test for split UTF-8 and split lines**
+- [x] **Step 1: Write a failing decoder test for split UTF-8 and split lines**
 
 ```ts
 it("decodes split UTF-8 records without waiting for another line", () => {
@@ -69,13 +69,13 @@ it("decodes split UTF-8 records without waiting for another line", () => {
 })
 ```
 
-- [ ] **Step 2: Run the focused test and verify red**
+- [x] **Step 2: Run the focused test and verify red**
 
 Run: `npx vitest run tests/unit/live-record.test.ts`
 
 Expected: FAIL because `src/backend/live-record.ts` does not exist.
 
-- [ ] **Step 3: Implement the bounded decoder and discriminated record validation**
+- [x] **Step 3: Implement the bounded decoder and discriminated record validation**
 
 Implement `LIVE_LINE_LIMIT = 1_048_576`, `LIVE_TOOL_TEXT_LIMIT = 65_536`, the exact `DshLiveRecord` union from the design, and:
 
@@ -93,11 +93,11 @@ export class LiveRecordDecoder {
 
 Use `StringDecoder("utf8")`, split only on newline, reject records whose version, session, finite non-negative integer coordinates, activity enum, booleans, or bounded strings are invalid, and emit only one generic diagnostic per failure class. Never include the rejected line in diagnostics.
 
-- [ ] **Step 4: Add one test per security/degradation behavior**
+- [x] **Step 4: Add one test per security/degradation behavior**
 
 Cover stale sessions, unknown version, malformed JSON, terminal-control sanitization, a line over 1 MiB, an unfinished buffer over 1 MiB, invalid numbers, and repeated malformed input producing one bounded diagnostic.
 
-- [ ] **Step 5: Run checks and commit**
+- [x] **Step 5: Run checks and commit**
 
 Run: `npx vitest run tests/unit/live-record.test.ts && npm run typecheck`
 
