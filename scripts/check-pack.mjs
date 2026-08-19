@@ -12,7 +12,7 @@ const allowed = (name) => name === "package.json"
   || name.startsWith("config/")
 const unexpected = files.map((file) => file.path).filter((name) => !allowed(name))
 const executable = files.find((file) => file.path === "bin/dsh-tui.js")
-const forbidden = files.map((file) => file.path).filter((name) => /(?:CODEX-HANDOFF|tests\/|src\/|hello\.txt|probe|\.env|\.sessions)/i.test(name))
+const forbidden = files.map((file) => file.path).filter((name) => /(?:CODEX-HANDOFF|tests\/|src\/|assets\/|hello\.txt|probe|\.env|\.sessions)/i.test(name))
 
 if (unexpected.length > 0) throw new Error(`unexpected package files: ${unexpected.join(", ")}`)
 if (forbidden.length > 0) throw new Error(`forbidden package files: ${forbidden.join(", ")}`)

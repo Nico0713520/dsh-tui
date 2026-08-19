@@ -2,6 +2,15 @@
   "name": "@nico0713520/dsh-tui",
   "version": "0.1.0",
   "description": "A safe, readable terminal client for DeepSeek Harness ACP",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nico0713520/dsh-tui.git"
+  },
+  "homepage": "https://github.com/Nico0713520/dsh-tui#readme",
+  "bugs": {
+    "url": "https://github.com/Nico0713520/dsh-tui/issues"
+  },
+  "preferGlobal": true,
   "bin": {
     "dsh-tui": "bin/dsh-tui.js"
   },

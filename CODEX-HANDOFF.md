@@ -4,7 +4,7 @@
 
 ## 已验证能力
 
-- `AcpClient` 负责 ACP initialize、真实 `session/new`、流式 `session/update`、单请求约束、无 id 的 `session/cancel` 通知、权限选择和完整关闭阶梯。
+- `AcpClient` 负责 ACP initialize、真实 `session/new`、流式 `session/update`、单请求约束、无 id 的 `session/cancel` 通知、权限选择，以及已测试的关闭顺序：结束 stdin，等待退出；再发默认终止信号并等待；最后发 SIGKILL 并等待，仍未退出则报错。
 - 后端异常、超时和未知结果不会自动重放原 prompt；副作用请求必须由用户重新提交。
 - 权限选择严格限制在 ACP 提供的 option id 内；缺少、异常或非法选择一律取消。
 - `SessionLogReader` 按 project key 定位 JSONL，增量读取、保留半行和 split UTF-8，解析 tool call/result、工具错误和 usage，并支持只读历史列表/回放。
