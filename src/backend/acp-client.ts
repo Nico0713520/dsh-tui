@@ -1,6 +1,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { createInterface, type Interface } from "node:readline"
+import type { Readable } from "node:stream"
 import { safeErrorText } from "../text.ts"
+import { LiveRecordDecoder, type DshLiveRecord } from "./live-record.ts"
 
 export type PermissionDecision =
   | { outcome: "selected"; optionId: string }
@@ -8,6 +10,7 @@ export type PermissionDecision =
 
 export interface AcpClientEvents {
   onAssistantText(text: string): void
+  onLiveRecord?(record: DshLiveRecord): void
   onSessionChanged(sessionId: string): void
   onDiagnostic(message: string): void
   onPermission(request: {
@@ -52,6 +55,9 @@ export class AcpClient {
   private readonly timeouts: Record<string, number>
   private process: ChildProcessWithoutNullStreams | null = null
   private output: Interface | null = null
+  private liveOutput: Readable | null = null
+  private liveDecoder: LiveRecordDecoder | null = null
+  private livePipeFailed = false
   private nextId = 1
   private readonly pending = new Map<number, PendingRequest>()
   private initialized = false
@@ -164,13 +170,34 @@ export class AcpClient {
     const child = spawn(executable, this.command.slice(1), {
       cwd: this.cwd,
       env: this.environment,
-      stdio: "pipe",
+      stdio: ["pipe", "pipe", "pipe", "pipe"],
       windowsHide: true,
-    })
+    }) as ChildProcessWithoutNullStreams
     this.process = child
     this.exitReported = false
+    this.livePipeFailed = false
     this.output = createInterface({ input: child.stdout })
     this.output.on("line", (line) => this.handleLine(line))
+    const liveOutput = child.stdio[3]
+    if (liveOutput && "readable" in liveOutput) {
+      this.liveOutput = liveOutput as Readable
+      this.liveDecoder = new LiveRecordDecoder({
+        sessionId: () => this.sessionId,
+        onRecord: (record) => this.events.onLiveRecord?.(record),
+        onDiagnostic: (message) => this.events.onDiagnostic(message),
+      })
+      this.liveOutput.on("data", (chunk: Buffer | string) => this.liveDecoder?.push(chunk))
+      this.liveOutput.once("end", () => {
+        if (this.process === child && !this.closed && !this.closing) {
+          this.reportLivePipeFailure("live event pipe closed; continuing with ACP")
+        }
+        this.finishLivePipe()
+      })
+      this.liveOutput.once("error", (error) => {
+        this.reportLivePipeFailure(`live event pipe unavailable: ${safeErrorText(error)}`)
+        this.finishLivePipe()
+      })
+    }
     child.stderr.on("data", (chunk: Buffer | string) => {
       const diagnostic = safeErrorText(String(chunk), 220)
       if (diagnostic) this.events.onDiagnostic(`backend: ${diagnostic}`)
@@ -195,6 +222,7 @@ export class AcpClient {
     this.process = null
     this.output?.close()
     this.output = null
+    this.finishLivePipe()
     this.initialized = false
     this.sessionId = null
     this.promptInFlight = false
@@ -238,6 +266,19 @@ export class AcpClient {
     if (message.method === "session/request_permission") {
       this.handlePermission(message)
     }
+  }
+
+  private finishLivePipe(): void {
+    const decoder = this.liveDecoder
+    this.liveDecoder = null
+    this.liveOutput = null
+    decoder?.end()
+  }
+
+  private reportLivePipeFailure(message: string): void {
+    if (this.livePipeFailed) return
+    this.livePipeFailed = true
+    this.events.onDiagnostic(message)
   }
 
   private handleUpdate(params: unknown): void {

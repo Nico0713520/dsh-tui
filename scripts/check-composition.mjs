@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { spawn } from "node:child_process"
 import { createInterface } from "node:readline"
 import { tmpdir } from "node:os"
@@ -9,6 +9,13 @@ const root = await mkdtemp(join(tmpdir(), "dsh-composition-"))
 const configFile = process.platform === "win32" ? "cordis.windows.yml" : "cordis.posix.yml"
 const backendBin = fileURLToPath(import.meta.resolve("@deepseek-ai/dsh-acp-demo/bin"))
 const configPath = fileURLToPath(new URL(`../config/${configFile}`, import.meta.url))
+const livePluginPath = fileURLToPath(new URL("../config/dsh-tui-live-events.mjs", import.meta.url))
+const livePluginText = await readFile(livePluginPath, "utf8")
+for (const name of ["cordis.posix.yml", "cordis.windows.yml"]) {
+  const text = await readFile(fileURLToPath(new URL(`../config/${name}`, import.meta.url)), "utf8")
+  if (!text.includes("name: './dsh-tui-live-events.mjs'")) throw new Error(`${name} does not load the live event plugin`)
+}
+if (!livePluginText.includes('export const name = "dsh-tui-live-events"')) throw new Error("live event plugin export is missing")
 const child = spawn(process.execPath, [backendBin, "--config", configPath], {
   cwd: process.cwd(),
   env: {

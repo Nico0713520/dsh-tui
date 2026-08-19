@@ -33,6 +33,9 @@
   config:
     policy: ask
 
+- id: dsh-tui-live-events
+  name: './dsh-tui-live-events.mjs'
+
 - id: acp-agent
   name: '@deepseek-ai/dsh-acp-demo'
   config:

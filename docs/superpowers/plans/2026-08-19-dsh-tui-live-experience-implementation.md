@@ -183,7 +183,7 @@ Commit: `feat: reconcile live and committed assistant output`
 - Consumes: Cordis `session/event` records and child fd 3 bytes.
 - Produces: `AcpClientEvents.onLiveRecord(record)` while preserving existing ACP callbacks.
 
-- [ ] **Step 1: Extend the fake backend and write a failing integration test**
+- [x] **Step 1: Extend the fake backend and write a failing integration test**
 
 The fake `live-stream` scenario writes a thinking record, two text deltas, and a text final to fd 3 before sending one authoritative ACP `agent_message_chunk`. Assert live callbacks arrive before prompt settlement and ACP text still arrives separately.
 
@@ -192,21 +192,21 @@ expect(events.live.map((record) => record.kind)).toEqual(["turn-start", "activit
 expect(events.chunks).toEqual(["hello!"])
 ```
 
-- [ ] **Step 2: Run the integration test and verify red**
+- [x] **Step 2: Run the integration test and verify red**
 
 Run: `npx vitest run tests/integration/acp-client.test.ts -t "carries live records"`
 
 Expected: FAIL because `AcpClientEvents.onLiveRecord` and fd 3 are absent.
 
-- [ ] **Step 3: Implement child fd 3 ownership in `AcpClient`**
+- [x] **Step 3: Implement child fd 3 ownership in `AcpClient`**
 
 Spawn with `stdio: ["pipe", "pipe", "pipe", "pipe"]`; type the child as `ChildProcessByStdio<Writable, Readable, Readable>` plus `stdio[3]`; connect `LiveRecordDecoder`; close/end the decoder during child finalization; and ensure live-pipe errors emit one sanitized diagnostic but never reject ACP requests.
 
-- [ ] **Step 4: Implement the shipped Cordis event tap**
+- [x] **Step 4: Implement the shipped Cordis event tap**
 
 Export `name = "dsh-tui-live-events"` and `apply(ctx)`. Open fd 3 with `createWriteStream(null, { fd: 3, autoClose: false })`, stop after stream error/backpressure failure, and map only `turn/start`, `turn/end`, `assistant/chunk`, `assistant/message`, `tool/call`, and `tool/result`. Map reasoning chunks to generic `activity: "thinking"` without text; map text chunks to `activity: "responding"` plus `text-delta`; map text block ends/messages to bounded `text-final`; reduce tool result content to bounded safe text; include the original `event.seq` in every output record.
 
-- [ ] **Step 5: Load the plugin in both platform compositions**
+- [x] **Step 5: Load the plugin in both platform compositions**
 
 Insert this entry before `acp-agent`:
 
@@ -217,11 +217,11 @@ Insert this entry before `acp-agent`:
 
 Extend composition checks to require the relative module and verify the package includes it.
 
-- [ ] **Step 6: Add live-pipe degradation integration cases**
+- [x] **Step 6: Add live-pipe degradation integration cases**
 
 Cover split UTF-8, malformed live JSON, wrong session before session creation, early fd 3 close, oversized lines, and normal ACP completion after each live failure.
 
-- [ ] **Step 7: Run checks and commit**
+- [x] **Step 7: Run checks and commit**
 
 Run: `npx vitest run tests/unit/live-record.test.ts tests/integration/acp-client.test.ts && npm run composition:check && npm run typecheck`
 

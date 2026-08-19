@@ -1,10 +1,18 @@
 import { createInterface } from "node:readline"
+import { closeSync, createWriteStream } from "node:fs"
 
 const scenario = process.env.FAKE_ACP_SCENARIO ?? "normal"
 const input = createInterface({ input: process.stdin })
 let nextSession = 1
+let activeSessionId = null
 let promptId = null
 let permissionId = 100
+const live = createWriteStream(null, { fd: 3, autoClose: false })
+live.on("error", () => {})
+
+if (scenario === "live-degraded") {
+  live.write(`${JSON.stringify({ v: 1, sessionId: "fake-001", seq: 0, kind: "turn-start", turn: 0 })}\n`)
+}
 
 if (scenario === "stubborn") process.on("SIGTERM", () => {})
 
@@ -23,6 +31,10 @@ function assistant(text) {
   })
 }
 
+function liveRecords(records) {
+  for (const record of records) live.write(`${JSON.stringify(record)}\n`)
+}
+
 input.on("line", (line) => {
   let frame
   try {
@@ -37,7 +49,8 @@ input.on("line", (line) => {
   }
 
   if (frame.method === "session/new") {
-    result(frame.id, { sessionId: `fake-${String(nextSession++).padStart(3, "0")}` })
+    activeSessionId = `fake-${String(nextSession++).padStart(3, "0")}`
+    result(frame.id, { sessionId: activeSessionId })
     return
   }
 
@@ -82,6 +95,35 @@ input.on("line", (line) => {
     return
   }
   if (scenario === "delayed") return
+
+  if (scenario === "live-stream") {
+    liveRecords([
+      { v: 1, sessionId: activeSessionId, seq: 1, kind: "turn-start", turn: 1 },
+      { v: 1, sessionId: activeSessionId, seq: 2, kind: "activity", turn: 1, step: 1, activity: "thinking" },
+      { v: 1, sessionId: activeSessionId, seq: 3, kind: "text-delta", turn: 1, step: 1, index: 0, text: "hel" },
+      { v: 1, sessionId: activeSessionId, seq: 4, kind: "text-delta", turn: 1, step: 1, index: 0, text: "lo" },
+      { v: 1, sessionId: activeSessionId, seq: 5, kind: "text-final", turn: 1, step: 1, index: 0, text: "hello" },
+      { v: 1, sessionId: activeSessionId, seq: 6, kind: "turn-end", turn: 1, reason: "end_turn" },
+    ])
+    assistant("hello!")
+    result(frame.id, { stopReason: "end_turn" })
+    return
+  }
+  if (scenario === "live-degraded") {
+    live.write("{must-not-appear\n")
+    live.write(`${"x".repeat(1_048_577)}\n`)
+    assistant("fallback")
+    result(frame.id, { stopReason: "end_turn" })
+    return
+  }
+  if (scenario === "live-pipe-close") {
+    live.end(() => {
+      try { closeSync(3) } catch {}
+      assistant("after close")
+      result(frame.id, { stopReason: "end_turn" })
+    })
+    return
+  }
 
   assistant("hello")
   result(frame.id, { stopReason: "end_turn" })

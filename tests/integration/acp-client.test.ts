@@ -3,19 +3,23 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { describe, expect, it } from "vitest"
 import { AcpClient, type AcpClientEvents, type PermissionDecision } from "../../src/backend/acp-client.ts"
+import type { DshLiveRecord } from "../../src/backend/live-record.ts"
 
 const fixture = fileURLToPath(new URL("../fixtures/fake-acp-server.mjs", import.meta.url))
 
 function createEvents(overrides: Partial<AcpClientEvents> = {}): AcpClientEvents & {
   chunks: string[]
+  live: DshLiveRecord[]
   exits: Array<{ outcomeUnknown: boolean }>
   diagnostics: string[]
 } {
   const events = {
     chunks: [] as string[],
+    live: [] as DshLiveRecord[],
     exits: [] as Array<{ outcomeUnknown: boolean }>,
     diagnostics: [] as string[],
     onAssistantText(text: string) { events.chunks.push(text) },
+    onLiveRecord(record: DshLiveRecord) { events.live.push(record) },
     onSessionChanged() {},
     onDiagnostic(message: string) { events.diagnostics.push(message) },
     async onPermission(): Promise<PermissionDecision> { return { outcome: "cancelled" } },
@@ -55,6 +59,50 @@ describe("AcpClient", () => {
     expect(result.stopReason).toBe("end_turn")
     expect(events.chunks).toEqual(["hello"])
     expect(acp.activeSessionId).toBe(sessionId)
+    await acp.close()
+  })
+
+  it("carries live records separately from authoritative ACP text", async () => {
+    const events = createEvents()
+    const acp = client("live-stream", events)
+    await acp.newSession()
+    await expect(acp.prompt("hello")).resolves.toEqual({ stopReason: "end_turn" })
+    await waitFor(() => events.live.length === 6)
+
+    expect(events.live.map((record) => record.kind)).toEqual([
+      "turn-start",
+      "activity",
+      "text-delta",
+      "text-delta",
+      "text-final",
+      "turn-end",
+    ])
+    expect(events.chunks).toEqual(["hello!"])
+    await acp.close()
+  })
+
+  it("continues through malformed and oversized live records without leaking their content", async () => {
+    const events = createEvents()
+    const acp = client("live-degraded", events)
+    await acp.newSession()
+    await expect(acp.prompt("fallback")).resolves.toEqual({ stopReason: "end_turn" })
+    await waitFor(() => events.diagnostics.length === 2)
+
+    expect(events.live).toEqual([])
+    expect(events.chunks).toEqual(["fallback"])
+    expect(events.diagnostics).toHaveLength(2)
+    expect(events.diagnostics.join(" ")).not.toContain("must-not-appear")
+    await acp.close()
+  })
+
+  it("falls back to ACP when the live pipe closes early", async () => {
+    const events = createEvents()
+    const acp = client("live-pipe-close", events)
+    await acp.newSession()
+    await expect(acp.prompt("fallback")).resolves.toEqual({ stopReason: "end_turn" })
+
+    expect(events.chunks).toEqual(["after close"])
+    expect(events.diagnostics.join(" ")).toMatch(/live event pipe/i)
     await acp.close()
   })
 
