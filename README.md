@@ -53,6 +53,14 @@ CRITICAL approval
 
 The approval overlay only accepts an option supplied by ACP. History replay is marked read-only and does not pretend to restore the old ACP session.
 
+## Live experience
+
+dsh-tui starts the backend and the non-blocking Deep Pulse entrance together. You can type immediately: one prompt submitted during startup stays editable and is sent exactly once when the ACP session is ready.
+
+During a turn, the status distinguishes thinking, responding, tool activity, and approval. Transient activity and text arrive over an optional bounded event pipe, while ACP remains authoritative for committed replies and prompt settlement. If that event pipe is unavailable or malformed, the client falls back to ACP and session JSONL without failing the prompt. Reasoning text is never displayed or copied into diagnostics.
+
+The frontend coalesces bursty updates and reparses only the active Markdown tail. This reduces event-to-paint delay and terminal churn, but it cannot reduce DeepSeek network or provider time-to-first-token.
+
 ## Keys and options
 
 - Enter sends the editor contents.
@@ -68,6 +76,8 @@ Useful options:
 --cwd <path>
 --persist-root <path>
 --tool-cards <on|off>
+--motion <full|reduced|off>
+--perf
 dsh-tui --backend-command-json '["node","server.mjs"]'
 ~~~
 
@@ -80,6 +90,8 @@ The backend command is a JSON array, not a shell command string. It is never she
 - ACP mode reads DEEPSEEK_API_KEY from your environment; credentials are not stored by dsh-tui.
 - --persist-root changes where session JSONL is read and observed.
 - --tool-cards off disables the JSONL side channel while keeping ACP replies.
+- DSH_TUI_MOTION accepts full, reduced, or off. NO_COLOR forces motion off.
+- DSH_TUI_PERF=1 or --perf adds a sanitized per-turn latency diagnostic without event content.
 
 ## Read-only History and new sessions
 

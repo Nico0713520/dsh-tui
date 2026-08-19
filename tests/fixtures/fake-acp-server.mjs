@@ -6,6 +6,7 @@ const input = createInterface({ input: process.stdin })
 let nextSession = 1
 let activeSessionId = null
 let promptId = null
+let promptCount = 0
 let permissionId = 100
 const live = createWriteStream(null, { fd: 3, autoClose: false })
 live.on("error", () => {})
@@ -50,7 +51,8 @@ input.on("line", (line) => {
 
   if (frame.method === "session/new") {
     activeSessionId = `fake-${String(nextSession++).padStart(3, "0")}`
-    result(frame.id, { sessionId: activeSessionId })
+    if (scenario === "slow-start-live") setTimeout(() => result(frame.id, { sessionId: activeSessionId }), 350)
+    else result(frame.id, { sessionId: activeSessionId })
     return
   }
 
@@ -70,11 +72,15 @@ input.on("line", (line) => {
       assistant("cancelled")
       result(promptId, { stopReason: "cancelled" })
     }
+    if (scenario === "live-cancel" && promptId !== null) {
+      result(promptId, { stopReason: "cancelled" })
+    }
     return
   }
 
   if (frame.method !== "session/prompt") return
   promptId = frame.id
+  promptCount += 1
 
   if (scenario === "forced-exit") {
     process.exit(17)
@@ -122,6 +128,41 @@ input.on("line", (line) => {
       assistant("after close")
       result(frame.id, { stopReason: "end_turn" })
     })
+    return
+  }
+  if (scenario === "slow-start-live") {
+    const promptText = frame.params?.prompt?.[0]?.text ?? ""
+    const answer = promptCount === 1 ? `queued:${promptText}` : "duplicate prompt"
+    liveRecords([
+      { v: 1, sessionId: activeSessionId, seq: 1, kind: "turn-start", turn: 1 },
+      { v: 1, sessionId: activeSessionId, seq: 2, kind: "activity", turn: 1, step: 1, activity: "thinking" },
+    ])
+    setTimeout(() => liveRecords([
+      { v: 1, sessionId: activeSessionId, seq: 3, kind: "text-delta", turn: 1, step: 1, index: 0, text: answer.slice(0, 6) },
+    ]), 80)
+    setTimeout(() => {
+      liveRecords([
+        { v: 1, sessionId: activeSessionId, seq: 4, kind: "text-final", turn: 1, step: 1, index: 0, text: answer },
+        { v: 1, sessionId: activeSessionId, seq: 5, kind: "turn-end", turn: 1, reason: "completed" },
+      ])
+      assistant(answer)
+      result(frame.id, { stopReason: "end_turn" })
+    }, 160)
+    return
+  }
+  if (scenario === "live-cancel") {
+    liveRecords([
+      { v: 1, sessionId: activeSessionId, seq: 1, kind: "turn-start", turn: 1 },
+      { v: 1, sessionId: activeSessionId, seq: 2, kind: "text-delta", turn: 1, step: 1, index: 0, text: "partial evidence" },
+    ])
+    return
+  }
+  if (scenario === "live-forced-exit") {
+    liveRecords([
+      { v: 1, sessionId: activeSessionId, seq: 1, kind: "turn-start", turn: 1 },
+      { v: 1, sessionId: activeSessionId, seq: 2, kind: "text-delta", turn: 1, step: 1, index: 0, text: "unknown evidence" },
+    ])
+    setTimeout(() => process.exit(17), 120)
     return
   }
 

@@ -17,6 +17,15 @@ describe("real Echo TUI", () => {
         .filter((entry) => entry.width > 48)
       expect(overflowing).toEqual([])
 
+      terminal.resize(32, 14)
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      const veryNarrowOverflow = terminal.screenText().split("\n")
+        .map((line) => visibleWidth(line))
+        .filter((width) => width > 32)
+      expect(veryNarrowOverflow).toEqual([])
+      expect(terminal.screenText()).toContain("dsh-tui")
+      terminal.resize(48, 16)
+
       const noticeStart = terminal.rawLength()
       terminal.write("\u0003")
       await terminal.waitForText("Ctrl+C again to exit", 2_000, noticeStart)

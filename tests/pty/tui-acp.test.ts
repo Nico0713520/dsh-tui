@@ -23,7 +23,7 @@ function acpArgs(persistRoot: string): string[] {
 
 async function withAcp(scenario: string, run: (terminal: ReturnType<typeof spawnTui>, root: string) => Promise<void>): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "dsh-pty-acp-"))
-  const terminal = spawnTui(acpArgs(root), { env: { FAKE_ACP_SCENARIO: scenario }, cols: 80, rows: 24 })
+  const terminal = spawnTui(acpArgs(root), { env: { FAKE_ACP_SCENARIO: scenario, DSH_TUI_MOTION: "off" }, cols: 80, rows: 24 })
   try {
     await terminal.waitForText("fake-001")
     await run(terminal, root)
@@ -34,6 +34,66 @@ async function withAcp(scenario: string, run: (terminal: ReturnType<typeof spawn
 }
 
 describe("real ACP TUI", () => {
+  it("keeps one editable startup prompt and shows activity before final text", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dsh-pty-startup-"))
+    const terminal = spawnTui(acpArgs(root), {
+      env: { FAKE_ACP_SCENARIO: "slow-start-live", DSH_TUI_MOTION: "full" },
+      cols: 80,
+      rows: 24,
+    })
+    try {
+      await terminal.waitForText("starting")
+      terminal.write("first\r")
+      await terminal.waitForText("queued")
+      terminal.write(" edited")
+      const liveStart = terminal.rawLength()
+      await terminal.waitForText("thinking", 8_000, liveStart)
+      await terminal.waitForText("queued:first edited", 8_000, liveStart)
+
+      const liveOutput = terminal.raw().slice(liveStart)
+      expect(liveOutput.indexOf("thinking")).toBeLessThan(liveOutput.indexOf("queued:first edited"))
+      expect(terminal.screenText()).not.toContain("duplicate prompt")
+      terminal.write("\u0003\u0003")
+      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+    } finally {
+      terminal.kill()
+      await rm(root, { recursive: true, force: true })
+    }
+  }, 15_000)
+
+  it("keeps partial live text when cancellation settles without committed ACP text", async () => {
+    await withAcp("live-cancel", async (terminal) => {
+      terminal.write("cancel me\r")
+      await terminal.waitForText("partial evidence")
+      terminal.write("\u001b")
+      await terminal.waitForText("interrupted")
+      expect(terminal.screenText()).toContain("partial evidence")
+      terminal.write("\u0003\u0003")
+      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+    })
+  }, 15_000)
+
+  it("keeps partial evidence and marks an unknown outcome after backend exit", async () => {
+    await withAcp("live-forced-exit", async (terminal) => {
+      terminal.write("side effect\r")
+      await terminal.waitForText("unknown evidence")
+      await terminal.waitForText("outcome is unknown")
+      expect(terminal.screenText()).toContain("unknown evidence")
+      terminal.write("\u0003\u0003")
+      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+    })
+  }, 15_000)
+
+  it("falls back to committed ACP output when fd 3 closes", async () => {
+    await withAcp("live-pipe-close", async (terminal) => {
+      terminal.write("fallback\r")
+      await terminal.waitForText("live event pipe closed")
+      await terminal.waitForText("after close")
+      terminal.write("\u0003\u0003")
+      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+    })
+  }, 15_000)
+
   it("allows the offered permission option through the overlay", async () => {
     await withAcp("permission", async (terminal) => {
       terminal.write("run the command\r")
@@ -73,7 +133,7 @@ describe("real ACP TUI", () => {
   it("cancels working prompts only after the overlay precedence is clear", async () => {
     await withAcp("delayed", async (terminal) => {
       terminal.write("hold this\r")
-      await terminal.waitForText("working")
+      await terminal.waitForText("thinking")
       terminal.write("\u001b")
       await terminal.waitForText("cancelled")
       terminal.write("\u0003\u0003")

@@ -5,15 +5,17 @@ export interface DrainSource {
 }
 
 export class LatestRenderGate<T> {
+  private readonly output: DrainSource
+  private readonly flush: (value: T) => void
   private pending: T | undefined
   private hasPending = false
   private waiting = false
   private disposed = false
 
-  constructor(
-    private readonly output: DrainSource,
-    private readonly flush: (value: T) => void,
-  ) {}
+  constructor(output: DrainSource, flush: (value: T) => void) {
+    this.output = output
+    this.flush = flush
+  }
 
   submit(value: T, priority = false): void {
     if (this.disposed) return

@@ -295,6 +295,7 @@ describe("AppController", () => {
     harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 1, kind: "turn-start", turn: 1 })
     harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 2, kind: "text-delta", turn: 1, step: 1, index: 0, text: "possibly applied" })
 
+    harness.controller.onDiagnostic("live event pipe closed; continuing with ACP")
     harness.controller.onBackendExit({ outcomeUnknown: true })
     harness.finishPrompt()
     await prompt

@@ -29,11 +29,14 @@ interface LiveRecordDecoderOptions {
 
 export class LiveRecordDecoder {
   private readonly decoder = new StringDecoder("utf8")
+  private readonly options: LiveRecordDecoderOptions
   private buffer = ""
   private discardingOversizedLine = false
   private readonly diagnosed = new Set<string>()
 
-  constructor(private readonly options: LiveRecordDecoderOptions) {}
+  constructor(options: LiveRecordDecoderOptions) {
+    this.options = options
+  }
 
   push(chunk: Buffer | string): void {
     let text = typeof chunk === "string" ? chunk : this.decoder.write(chunk)

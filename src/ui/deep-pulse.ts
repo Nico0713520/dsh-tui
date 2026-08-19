@@ -35,14 +35,16 @@ export function deepPulseFrame(options: DeepPulseFrameOptions): string {
 }
 
 export class DeepPulseClock {
+  private readonly motion: MotionPreference
+  private readonly onTick: (tick: DeepPulseTick) => void
   private timer: ReturnType<typeof setTimeout> | null = null
   private frame = 10
   private settled = true
 
-  constructor(
-    private readonly motion: MotionPreference,
-    private readonly onTick: (tick: DeepPulseTick) => void,
-  ) {}
+  constructor(motion: MotionPreference, onTick: (tick: DeepPulseTick) => void) {
+    this.motion = motion
+    this.onTick = onTick
+  }
 
   start(): void {
     this.disposeTimer()
@@ -108,13 +110,15 @@ export class DeepPulseClock {
 }
 
 export class ElapsedClock {
+  private readonly onTick: (seconds: number) => void
+  private readonly now: () => number
   private timer: ReturnType<typeof setInterval> | null = null
   private startedAt = 0
 
-  constructor(
-    private readonly onTick: (seconds: number) => void,
-    private readonly now: () => number = Date.now,
-  ) {}
+  constructor(onTick: (seconds: number) => void, now: () => number = Date.now) {
+    this.onTick = onTick
+    this.now = now
+  }
 
   start(): void {
     this.stop()

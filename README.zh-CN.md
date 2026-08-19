@@ -53,6 +53,14 @@ CRITICAL approval
 
 审批弹窗只接受 ACP 实际提供的 option。历史回放会明确标记为只读，不会伪装成恢复旧 ACP session。
 
+## 实时体验
+
+dsh-tui 会同时启动后台和非阻塞的 Deep Pulse 入场动画。用户可以立即输入：启动期间提交的一条 prompt 仍可编辑，ACP session ready 后只会发送一次。
+
+任务进行时，状态栏会区分 thinking、responding、工具调用和审批。短暂活动与流式文本通过可选、有上限的事件管道到达，ACP 仍然是最终回复与 prompt 结算的权威来源。事件管道缺失或异常时，客户端会自动退回 ACP 和 session JSONL，不会让 prompt 失败。推理正文不会被展示，也不会进入诊断信息。
+
+前端会合并密集更新，并且只重新解析正在增长的 Markdown 尾部。这能降低事件到画面的延迟和终端抖动，但无法缩短 DeepSeek 网络或服务端的首 token 时间。
+
 ## 按键与选项
 
 - Enter 发送编辑器内容。
@@ -68,6 +76,8 @@ CRITICAL approval
 --cwd <path>
 --persist-root <path>
 --tool-cards <on|off>
+--motion <full|reduced|off>
+--perf
 dsh-tui --backend-command-json '["node","server.mjs"]'
 ~~~
 
@@ -80,6 +90,8 @@ backend command 接收 JSON 数组，不是 shell 命令字符串，也不会交
 - ACP 模式从环境变量 DEEPSEEK_API_KEY 读取凭证；dsh-tui 不保存凭证。
 - --persist-root 修改读取和观察 session JSONL 的位置。
 - --tool-cards off 只关闭 JSONL 旁路卡片，不影响 ACP 回复。
+- DSH_TUI_MOTION 接受 full、reduced 或 off；NO_COLOR 会强制关闭动画。
+- DSH_TUI_PERF=1 或 --perf 会增加不含事件内容的单轮延迟诊断。
 
 ## 只读 History 与新会话
 

@@ -214,7 +214,8 @@ export class AppView implements ControllerView {
     this.partialAssistant.setText(sanitizeTerminalText(state.partialAssistantText))
     this.updateHeader()
     this.updateStatus()
-    this.tui.requestRender()
+    const committedLiveText = Boolean(previous?.partialAssistantText) && !state.partialAssistantText
+    this.tui.requestRender(committedLiveText)
     if (!previous?.partialAssistantText && state.partialAssistantText) this.actions?.onLiveTextPaint()
   }
 

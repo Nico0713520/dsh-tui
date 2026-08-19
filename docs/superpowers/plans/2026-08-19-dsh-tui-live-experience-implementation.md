@@ -462,37 +462,37 @@ Commit: `perf: coalesce live paints and report frontend latency`
 - Consumes: real key bytes, terminal resize, fake ACP/live records, fd 3 failure, and process shutdown.
 - Produces: visible immediate shell/editor/activity/text behavior and clean exit through the CLI PTY seam.
 
-- [ ] **Step 1: Write failing PTY cases for startup queue and live activity**
+- [x] **Step 1: Write failing PTY cases for startup queue and live activity**
 
 Add a `slow-start-live` fake scenario. Type and submit before `session/new` settles, edit the queued prompt, and assert it appears once after readiness. Assert `thinking` appears before authoritative ACP text and final text appears once.
 
-- [ ] **Step 2: Run focused PTY tests and verify red**
+- [x] **Step 2: Run focused PTY tests and verify red**
 
 Run: `npm run test:pty -- -t "startup queue|live activity"`
 
 Expected: at least one new case FAIL before the complete wiring is present.
 
-- [ ] **Step 3: Add PTY regressions for interruption and failure**
+- [x] **Step 3: Add PTY regressions for interruption and failure**
 
 Cover cancellation after partial live text, outcome-unknown exit after partial text, malformed/closed fd 3 with successful ACP completion, permission overlay focus, resize below 52 and 34 columns, CJK input, final-output dedupe, and double Ctrl+C cleanup.
 
-- [ ] **Step 4: Document the actual behavior and limitations**
+- [x] **Step 4: Document the actual behavior and limitations**
 
 Document the three channels, startup queue, activity labels, Deep Pulse controls, `DSH_TUI_PERF=1`, graceful live-pipe fallback, and the fact that provider time-to-first-token is outside frontend control. Do not document the API key value or imply raw reasoning is shown.
 
-- [ ] **Step 5: Run the complete quality gate**
+- [x] **Step 5: Run the complete quality gate**
 
 Run: `npm run check`
 
 Expected: lint, typecheck, all unit/integration/PTy tests, build, composition check, publint, and package checks all PASS.
 
-- [ ] **Step 6: Run one packaged smoke test**
+- [x] **Step 6: Run one packaged smoke test**
 
 Run: `npm pack --dry-run && npm run install:check`
 
 Expected: the package contains `config/dsh-tui-live-events.mjs`, installed CLI starts in echo mode, and exits cleanly.
 
-- [ ] **Step 7: Mark the plan complete and commit**
+- [x] **Step 7: Mark the plan complete and commit**
 
 Change every completed checkbox in this plan to `[x]`, rerun `git diff --check`, and inspect `git status --short` for only intended files.
 
