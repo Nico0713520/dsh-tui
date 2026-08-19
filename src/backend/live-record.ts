@@ -24,6 +24,8 @@ export type DshLiveRecord = LiveRecordBase & (
 interface LiveRecordDecoderOptions {
   sessionId(): string | null
   onRecord(record: DshLiveRecord): void
+  onControlReady?(): void
+  onBarrier?(id: number): void
   onDiagnostic(message: string): void
 }
 
@@ -94,6 +96,17 @@ export class LiveRecordDecoder {
     if (typeof value === "object" && value !== null && (value as Record<string, unknown>).v !== 1) {
       this.diagnose("version", "live event pipe used an unsupported wire version")
       return
+    }
+    if (typeof value === "object" && value !== null) {
+      const control = value as Record<string, unknown>
+      if (control.v === 1 && control.kind === "control-ready") {
+        this.options.onControlReady?.()
+        return
+      }
+      if (control.v === 1 && control.kind === "barrier" && isCoordinate(control.id)) {
+        this.options.onBarrier?.(control.id)
+        return
+      }
     }
     const record = decodeRecord(value)
     if (!record) {

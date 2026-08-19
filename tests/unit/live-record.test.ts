@@ -2,6 +2,22 @@ import { describe, expect, it } from "vitest"
 import { LiveRecordDecoder, type DshLiveRecord } from "../../src/backend/live-record.ts"
 
 describe("LiveRecordDecoder", () => {
+  it("decodes process control readiness and barriers outside session filtering", () => {
+    const controls: string[] = []
+    const decoder = new LiveRecordDecoder({
+      sessionId: () => null,
+      onRecord: () => {},
+      onControlReady: () => controls.push("ready"),
+      onBarrier: (id) => controls.push(`barrier:${id}`),
+      onDiagnostic: () => {},
+    })
+
+    decoder.push(`${JSON.stringify({ v: 1, kind: "control-ready" })}\n`)
+    decoder.push(`${JSON.stringify({ v: 1, kind: "barrier", id: 7 })}\n`)
+
+    expect(controls).toEqual(["ready", "barrier:7"])
+  })
+
   it("decodes split UTF-8 records without waiting for another line", () => {
     const records: DshLiveRecord[] = []
     const decoder = new LiveRecordDecoder({

@@ -81,6 +81,38 @@ describe("AcpClient", () => {
     await acp.close()
   })
 
+  it("waits for the live pipe barrier before opening the next prompt boundary", async () => {
+    const events = createEvents()
+    const acp = client("live-stream", events)
+    await acp.newSession()
+    await expect(acp.prompt("hello")).resolves.toEqual({ stopReason: "end_turn" })
+
+    await acp.synchronizeLiveEvents()
+
+    expect(events.live.map((record) => record.kind)).toEqual([
+      "turn-start",
+      "activity",
+      "text-delta",
+      "text-delta",
+      "text-final",
+      "turn-end",
+    ])
+    await acp.close()
+  })
+
+  it("disables ambiguous live records when prompt-boundary control is unavailable", async () => {
+    const events = createEvents()
+    const acp = client("no-live-control", events)
+    await acp.newSession()
+
+    await expect(acp.prompt("first")).resolves.toEqual({ stopReason: "end_turn" })
+    await expect(acp.prompt("second")).resolves.toEqual({ stopReason: "end_turn" })
+
+    expect(events.chunks).toEqual(["hello", "hello"])
+    expect(events.diagnostics).toEqual(["live event synchronization unavailable; continuing with ACP"])
+    await acp.close()
+  })
+
   it("continues through malformed and oversized live records without leaking their content", async () => {
     const events = createEvents()
     const acp = client("live-degraded", events)

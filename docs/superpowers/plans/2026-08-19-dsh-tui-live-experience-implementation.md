@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make dsh-tui feel immediate by carrying real DSH activity and text over an optional fd 3 event pipe, reconciling it with authoritative ACP output, preserving startup input, rendering streamed Markdown incrementally, and adding a non-blocking Deep Pulse entrance.
+**Goal:** Make dsh-tui feel immediate by carrying real DSH activity and text over an optional fd 3 event pipe, fencing prompt boundaries with a content-free fd 4 barrier, reconciling live data with authoritative ACP output, preserving startup input, rendering streamed Markdown incrementally, and adding a non-blocking Deep Pulse entrance.
 
-**Architecture:** ACP stdout remains the correctness channel, a shipped Cordis plugin writes normalized transient events to child fd 3, and JSONL remains history and fallback telemetry. The parent validates the live wire through a decoder module, an assistant-stream module hides ordering and reconciliation, the controller owns lifecycle/activity/queue state, and the view coalesces incremental rendering and animation behind its existing interface.
+**Architecture:** ACP stdout remains the correctness channel, a shipped Cordis plugin writes normalized transient events to child fd 3, a content-free parent-to-child fd 4 barrier proves prior live writes are drained before a new prompt, and JSONL remains history and fallback telemetry. The parent validates the live wire through a decoder module, an assistant-stream module hides ordering and reconciliation, the controller owns lifecycle/activity/queue state, and the view coalesces incremental rendering and animation behind its existing interface.
 
 **Tech Stack:** Node.js 22+, TypeScript 6, Vitest 4, `@deepseek-ai/dsh-*` 0.1.0-rc.7, `@earendil-works/pi-tui` 0.84.2, JSONL/NDJSON, node-pty.
 
@@ -12,6 +12,7 @@
 
 - ACP stdout is authoritative for prompts, permissions, cancellation, session lifecycle, committed output, and prompt settlement.
 - fd 3 is optional and may carry only normalized version-1 activity, assistant text, tool, usage, and turn records.
+- fd 4 is optional and may carry only versioned readiness/barrier controls with a bounded integer id; if synchronization is unavailable, live rendering degrades to ACP rather than guessing record ownership.
 - JSONL remains durable history, diagnostics, usage/tool fallback, and post-run observability.
 - Raw model reasoning text must be discarded inside the child and must never cross fd 3, enter diagnostics, or render in the TUI.
 - Live records and unfinished decoder buffers are limited to 1 MiB; tool arguments and results are limited to 64 KiB.
@@ -518,6 +519,7 @@ Commit: `docs: complete the live experience implementation`
 - [x] Preserve ACP commitment when the first late record is tool/usage metadata.
 - [x] Budget compact phase, model, and interruption segments together on narrow terminals.
 - [x] Bind prepared prompts to observed backend turns so a turnless cancellation cannot disable later live streaming.
+- [x] Fence prompt boundaries with an fd 4 barrier so delayed `turn-start` records cannot reopen an interrupted turn.
 
 ---
 

@@ -1,8 +1,12 @@
 import { createInterface } from "node:readline"
 import { closeSync, createWriteStream } from "node:fs"
+import { Socket } from "node:net"
 
 const scenario = process.env.FAKE_ACP_SCENARIO ?? "normal"
 const input = createInterface({ input: process.stdin })
+const controlInput = new Socket({ fd: 4, readable: true, writable: false })
+controlInput.unref()
+const control = createInterface({ input: controlInput, crlfDelay: Infinity })
 let nextSession = 1
 let activeSessionId = null
 let promptId = null
@@ -10,6 +14,20 @@ let promptCount = 0
 let permissionId = 100
 const live = createWriteStream(null, { fd: 3, autoClose: false })
 live.on("error", () => {})
+if (scenario !== "no-live-control") live.write(`${JSON.stringify({ v: 1, kind: "control-ready" })}\n`)
+
+control.on("line", (line) => {
+  let request
+  try {
+    request = JSON.parse(line)
+  } catch {
+    return
+  }
+  if (request?.v === 1 && request.kind === "barrier" && Number.isSafeInteger(request.id) && request.id >= 0) {
+    live.write(`${JSON.stringify({ v: 1, kind: "barrier", id: request.id })}\n`)
+  }
+})
+controlInput.on("error", () => control.close())
 
 if (scenario === "live-degraded") {
   live.write(`${JSON.stringify({ v: 1, sessionId: "fake-001", seq: 0, kind: "turn-start", turn: 0 })}\n`)

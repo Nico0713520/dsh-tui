@@ -26,10 +26,12 @@ function createHarness(configOverride: Partial<AppConfig> = {}) {
   let sessionGate: Promise<void> | null = null
   let releaseSession: (() => void) | undefined
   let rejectSession: ((error: Error) => void) | undefined
+  let liveSyncGate: Promise<void> | null = null
+  let releaseLiveSync: (() => void) | undefined
   const renders: AppState[] = []
   const promptCalls: string[] = []
   const cleanupOrder: string[] = []
-  const backend: BackendPort & { stopLiveEvents(): void } = {
+  const backend: BackendPort & { stopLiveEvents(): void; synchronizeLiveEvents(): Promise<void> } = {
     get activeSessionId() { return activeSessionId },
     async start() {},
     async newSession() {
@@ -37,6 +39,9 @@ function createHarness(configOverride: Partial<AppConfig> = {}) {
       if (sessionGate) await sessionGate
       activeSessionId = id
       return id
+    },
+    async synchronizeLiveEvents() {
+      if (liveSyncGate) await liveSyncGate
     },
     async prompt(text) {
       promptCalls.push(text)
@@ -107,6 +112,13 @@ function createHarness(configOverride: Partial<AppConfig> = {}) {
       return () => {
         releaseSession?.()
         sessionGate = null
+      }
+    },
+    deferLiveSync() {
+      liveSyncGate = new Promise((resolve) => { releaseLiveSync = resolve })
+      return () => {
+        releaseLiveSync?.()
+        liveSyncGate = null
       }
     },
     failSession(error = new Error("startup failed")) {
@@ -436,6 +448,32 @@ describe("AppController", () => {
     expect(harness.controller.state.partialAssistantText).toBe("")
     harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 4, kind: "turn-start", turn: 2 })
     harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 5, kind: "text-delta", turn: 2, step: 1, index: 0, text: "fresh" })
+    expect(harness.controller.state.partialAssistantText).toBe("fresh")
+
+    harness.finishPrompt()
+    await second
+  })
+
+  it("drains delayed interrupted records before binding the next backend turn", async () => {
+    const harness = createHarness()
+    harness.deferPrompt()
+    await harness.controller.start()
+    const first = harness.controller.submit("first")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    harness.finishPrompt("cancelled")
+    await first
+
+    const releaseLiveSync = harness.deferLiveSync()
+    const second = harness.controller.submit("second")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 1, kind: "turn-start", turn: 1 })
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 2, kind: "text-delta", turn: 1, step: 1, index: 0, text: "stale" })
+    expect(harness.controller.state.partialAssistantText).toBe("")
+
+    releaseLiveSync()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 3, kind: "turn-start", turn: 1 })
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 4, kind: "text-delta", turn: 1, step: 1, index: 0, text: "fresh" })
     expect(harness.controller.state.partialAssistantText).toBe("fresh")
 
     harness.finishPrompt()

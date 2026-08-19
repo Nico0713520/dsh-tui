@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { createInterface, type Interface } from "node:readline"
-import type { Readable } from "node:stream"
+import type { Readable, Writable } from "node:stream"
 import { safeErrorText } from "../text.ts"
 import { LiveRecordDecoder, type DshLiveRecord } from "./live-record.ts"
 
@@ -56,13 +56,24 @@ export class AcpClient {
   private process: ChildProcessWithoutNullStreams | null = null
   private output: Interface | null = null
   private liveOutput: Readable | null = null
+  private liveControl: Writable | null = null
   private liveDecoder: LiveRecordDecoder | null = null
   private livePipeFailed = false
+  private liveControlReady = false
+  private liveBoundaryRequired = false
+  private liveBoundaryPrepared = false
+  private nextLiveBarrierId = 1
+  private readonly pendingLiveBarriers = new Map<number, {
+    resolve(): void
+    timer: ReturnType<typeof setTimeout>
+  }>()
   private nextId = 1
   private readonly pending = new Map<number, PendingRequest>()
   private initialized = false
   private sessionId: string | null = null
   private promptInFlight = false
+  private promptRequestSent = false
+  private promptCancelRequested = false
   private closed = false
   private closing = false
   private closePromise: Promise<void> | null = null
@@ -117,16 +128,64 @@ export class AcpClient {
       throw new Error("ACP session/new returned no sessionId")
     }
     this.sessionId = result.sessionId
+    this.liveBoundaryRequired = false
+    this.liveBoundaryPrepared = false
     this.events.onSessionChanged(result.sessionId)
     return result.sessionId
+  }
+
+  async synchronizeLiveEvents(): Promise<void> {
+    if (this.liveBoundaryPrepared || !this.liveBoundaryRequired) {
+      this.liveBoundaryPrepared = true
+      return
+    }
+    const control = this.liveControl
+    if (!this.liveControlReady || !control || control.destroyed || !control.writable) {
+      this.reportLivePipeFailure("live event synchronization unavailable; continuing with ACP")
+      this.stopLiveEvents()
+      return
+    }
+    const id = this.nextLiveBarrierId++
+    await new Promise<void>((resolve) => {
+      let settled = false
+      const finish = () => {
+        if (settled) return
+        settled = true
+        const pending = this.pendingLiveBarriers.get(id)
+        this.pendingLiveBarriers.delete(id)
+        if (pending) clearTimeout(pending.timer)
+        this.liveBoundaryRequired = false
+        this.liveBoundaryPrepared = true
+        resolve()
+      }
+      const timer = setTimeout(() => {
+        this.reportLivePipeFailure("live event synchronization timed out; continuing with ACP")
+        this.stopLiveEvents()
+        finish()
+      }, 1_000)
+      this.pendingLiveBarriers.set(id, { resolve: finish, timer })
+      try {
+        control.write(`${JSON.stringify({ v: 1, kind: "barrier", id })}\n`)
+      } catch (error) {
+        this.reportLivePipeFailure(`live event synchronization failed: ${safeErrorText(error)}`)
+        this.stopLiveEvents()
+        finish()
+      }
+    })
   }
 
   async prompt(text: string): Promise<{ stopReason: string }> {
     if (this.closed || this.closing) throw new Error("ACP client is closed")
     if (this.promptInFlight) throw new Error("A prompt is already in flight")
     this.promptInFlight = true
+    this.promptRequestSent = false
+    this.promptCancelRequested = false
     try {
       const sessionId = this.sessionId ?? await this.createSession()
+      await this.synchronizeLiveEvents()
+      this.liveBoundaryPrepared = false
+      if (this.promptCancelRequested) return { stopReason: "cancelled" }
+      this.promptRequestSent = true
       const result = await this.call("session/prompt", {
         sessionId,
         prompt: [{ type: "text", text }],
@@ -136,12 +195,17 @@ export class AcpClient {
         : "unknown"
       return { stopReason }
     } finally {
+      if (this.promptRequestSent) this.liveBoundaryRequired = true
       this.promptInFlight = false
+      this.promptRequestSent = false
+      this.promptCancelRequested = false
     }
   }
 
   cancel(): void {
-    if (!this.sessionId || !this.promptInFlight || !this.process || this.closed || this.closing) return
+    if (!this.promptInFlight || this.closed || this.closing) return
+    this.promptCancelRequested = true
+    if (!this.sessionId || !this.promptRequestSent || !this.process) return
     try {
       this.writeFrame({
         jsonrpc: "2.0",
@@ -167,12 +231,16 @@ export class AcpClient {
     const decoder = this.liveDecoder
     this.liveOutput = null
     this.liveDecoder = null
+    this.liveBoundaryRequired = false
+    this.liveBoundaryPrepared = true
     decoder?.discard()
-    if (!output) return
-    output.removeAllListeners("data")
-    output.removeAllListeners("end")
-    output.removeAllListeners("error")
-    output.destroy()
+    if (output) {
+      output.removeAllListeners("data")
+      output.removeAllListeners("end")
+      output.removeAllListeners("error")
+      output.destroy()
+    }
+    this.stopLiveControl()
   }
 
   private ensureProcess(): ChildProcessWithoutNullStreams {
@@ -184,7 +252,7 @@ export class AcpClient {
     const child = spawn(executable, this.command.slice(1), {
       cwd: this.cwd,
       env: this.environment,
-      stdio: ["pipe", "pipe", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe", "pipe", "pipe"],
       windowsHide: true,
     }) as ChildProcessWithoutNullStreams
     this.process = child
@@ -198,6 +266,8 @@ export class AcpClient {
       this.liveDecoder = new LiveRecordDecoder({
         sessionId: () => this.sessionId,
         onRecord: (record) => this.events.onLiveRecord?.(record),
+        onControlReady: () => { this.liveControlReady = true },
+        onBarrier: (id) => this.pendingLiveBarriers.get(id)?.resolve(),
         onDiagnostic: (message) => this.events.onDiagnostic(message),
       })
       this.liveOutput.on("data", (chunk: Buffer | string) => this.liveDecoder?.push(chunk))
@@ -210,6 +280,14 @@ export class AcpClient {
       this.liveOutput.once("error", (error) => {
         this.reportLivePipeFailure(`live event pipe unavailable: ${safeErrorText(error)}`)
         this.finishLivePipe()
+      })
+    }
+    const liveControl = child.stdio[4]
+    if (liveControl && "writable" in liveControl) {
+      this.liveControl = liveControl as Writable
+      this.liveControl.once("error", (error) => {
+        this.reportLivePipeFailure(`live event control unavailable: ${safeErrorText(error)}`)
+        this.stopLiveEvents()
       })
     }
     child.stderr.on("data", (chunk: Buffer | string) => {
@@ -240,6 +318,8 @@ export class AcpClient {
     this.initialized = false
     this.sessionId = null
     this.promptInFlight = false
+    this.promptRequestSent = false
+    this.promptCancelRequested = false
     const outcomeUnknown = this.pending.size > 0
     this.rejectPending(error)
     if (!this.closing && !this.closed && !this.exitReported) {
@@ -287,6 +367,23 @@ export class AcpClient {
     this.liveDecoder = null
     this.liveOutput = null
     decoder?.end()
+    this.stopLiveControl()
+  }
+
+  private stopLiveControl(): void {
+    const control = this.liveControl
+    this.liveControl = null
+    this.liveControlReady = false
+    this.liveBoundaryRequired = false
+    this.liveBoundaryPrepared = true
+    for (const [id, pending] of this.pendingLiveBarriers) {
+      this.pendingLiveBarriers.delete(id)
+      clearTimeout(pending.timer)
+      pending.resolve()
+    }
+    if (!control) return
+    control.removeAllListeners("error")
+    control.destroy()
   }
 
   private reportLivePipeFailure(message: string): void {

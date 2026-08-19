@@ -57,7 +57,7 @@ The approval overlay only accepts an option supplied by ACP. History replay is m
 
 dsh-tui starts the backend and the non-blocking Deep Pulse entrance together. You can type immediately: one prompt submitted during startup stays editable and is sent exactly once when the ACP session is ready.
 
-During a turn, the status distinguishes thinking, responding, tool activity, and approval. Transient activity and text arrive over an optional bounded event pipe, while ACP remains authoritative for committed replies and prompt settlement. If that event pipe is unavailable or malformed, the client falls back to ACP and session JSONL without failing the prompt. Reasoning text is never displayed or copied into diagnostics.
+During a turn, the status distinguishes thinking, responding, tool activity, and approval. Transient activity and text arrive over an optional bounded event pipe, while ACP remains authoritative for committed replies and prompt settlement. A content-free control barrier drains the event pipe before the next prompt, so delayed records from an interrupted turn cannot appear in the new turn. If either live pipe is unavailable or malformed, the client falls back to ACP and session JSONL without failing the prompt. Reasoning text is never displayed or copied into diagnostics.
 
 The frontend coalesces bursty updates and reparses only the active Markdown tail. This reduces event-to-paint delay and terminal churn, but it cannot reduce DeepSeek network or provider time-to-first-token.
 

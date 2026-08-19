@@ -1,4 +1,6 @@
 import { createWriteStream } from "node:fs"
+import { Socket } from "node:net"
+import { createInterface } from "node:readline"
 
 export const name = "dsh-tui-live-events"
 
@@ -7,6 +9,9 @@ const MAX_RECORD_BYTES = 1_048_576
 
 export function apply(ctx) {
   const output = createWriteStream(null, { fd: 3, autoClose: false })
+  const controlInput = new Socket({ fd: 4, readable: true, writable: false })
+  controlInput.unref()
+  const control = createInterface({ input: controlInput, crlfDelay: Infinity })
   const textFinals = new WeakMap()
   let writable = true
   let blocked = false
@@ -19,17 +24,31 @@ export function apply(ctx) {
     if (writable) blocked = false
   })
 
-  const send = (record) => {
-    if (!writable || blocked) return
+  const send = (record, essential = false) => {
+    if (!writable || (blocked && !essential)) return
     const line = `${JSON.stringify({ v: 1, ...record })}\n`
     if (Buffer.byteLength(line) > MAX_RECORD_BYTES) return
     try {
-      blocked = !output.write(line)
+      blocked = !output.write(line) || blocked
     } catch {
       writable = false
       blocked = false
     }
   }
+
+  controlInput.on("error", () => control.close())
+  control.on("line", (line) => {
+    let request
+    try {
+      request = JSON.parse(line)
+    } catch {
+      return
+    }
+    if (request?.v === 1 && request.kind === "barrier" && Number.isSafeInteger(request.id) && request.id >= 0) {
+      send({ kind: "barrier", id: request.id }, true)
+    }
+  })
+  send({ kind: "control-ready" }, true)
 
   const markFinal = (session, turn, step) => {
     let steps = textFinals.get(session)
@@ -119,6 +138,8 @@ export function apply(ctx) {
 
   ctx.effect(() => () => {
     writable = false
+    control.close()
+    controlInput.destroy()
     output.destroy()
   }, "dsh-tui live event pipe")
 }

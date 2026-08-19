@@ -63,6 +63,7 @@ export interface ControllerView {
 export interface BackendPort {
   start(): Promise<void>
   newSession(): Promise<string>
+  synchronizeLiveEvents?(): Promise<void>
   prompt(text: string): Promise<{ stopReason: string }>
   cancel(): void
   stopLiveEvents?(): void
@@ -165,7 +166,6 @@ export class AppController {
 
   private async runPrompt(value: string): Promise<void> {
     this.committedAssistantText = ""
-    this.assistantStream.preparePrompt()
     this.turnPerf.start()
     this.perfReported = false
     this.setState({
@@ -178,6 +178,17 @@ export class AppController {
       transcript: [...this.stateValue.transcript, { kind: "user", text: value }],
     })
     try {
+      await this.backend.synchronizeLiveEvents?.()
+      if (this.isClosing() || this.hasFailed()) return
+      if (this.stateValue.phase === "cancelling") {
+        const snapshot = this.assistantStream.interrupt("cancelled")
+        this.setState({ partialAssistantText: snapshot.text, interruption: "cancelled" })
+        this.finishAssistant("cancelled")
+        this.reportPerf()
+        this.setState({ phase: "ready", activity: { kind: "idle" }, backendMessage: "interrupted" })
+        return
+      }
+      this.assistantStream.preparePrompt()
       const result = await this.backend.prompt(value)
       if (this.isClosing() || this.stateValue.phase === "failed") return
       this.turnPerf.mark("settled")
@@ -505,6 +516,10 @@ export class AppController {
 
   private isClosing(): boolean {
     return this.stateValue.phase === "closing"
+  }
+
+  private hasFailed(): boolean {
+    return this.stateValue.phase === "failed"
   }
 
   private setState(patch: Partial<AppState>): void {

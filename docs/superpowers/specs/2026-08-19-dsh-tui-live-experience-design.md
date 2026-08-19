@@ -34,7 +34,7 @@ The optimized TUI must provide these user-visible outcomes:
 
 ## Architecture
 
-Use three channels with separate authority:
+Use three information channels with separate authority, plus one content-free synchronization pipe:
 
 ```text
 DSH runtime
@@ -44,15 +44,18 @@ DSH runtime
   |-- fd 3: dsh-tui live event pipe
   |     transient activity, text deltas/final blocks, tool state, usage, turn identity
   |
+  |-- fd 4: dsh-tui live control pipe (parent to child)
+  |     readiness and numbered barriers only; no prompt or model content
+  |
   `-- JSONL persistence
         history, diagnostics, usage/tool fallback, post-run observability
 ```
 
-ACP is the correctness channel. The fd 3 pipe is an optional latency channel. JSONL remains the durable observability and history channel. Losing either non-ACP channel must not prevent a prompt from completing correctly.
+ACP is the correctness channel. The fd 3 pipe is an optional latency channel. JSONL remains the durable observability and history channel. Before opening a new prompt boundary, the parent sends a numbered barrier over fd 4 and waits until the child echoes it after all prior fd 3 writes. Losing any non-ACP channel must not prevent a prompt from completing correctly; if the barrier cannot be proven, live rendering is disabled and ACP remains available.
 
 ### DSH Live Event Tap
 
-Add a small shipped Cordis plugin at `config/dsh-tui-live-events.mjs`. Both platform compositions load it by relative path. `AcpClient` spawns the backend with an additional pipe at child fd 3 and consumes newline-delimited versioned records from `child.stdio[3]`.
+Add a small shipped Cordis plugin at `config/dsh-tui-live-events.mjs`. Both platform compositions load it by relative path. `AcpClient` spawns the backend with a live output at child fd 3 and a control input at child fd 4. It consumes newline-delimited versioned records from `child.stdio[3]`; the plugin reads only readiness/barrier controls from fd 4 and echoes each accepted barrier on fd 3.
 
 The tap listens to DSH `session/event` events and emits only the normalized subset needed by the UI. Every record carries the original monotonic DSH event sequence for deduplication:
 
@@ -189,6 +192,7 @@ The benchmark reports trends and regressions; it does not claim that dsh-tui can
 ## Failure and Degradation Rules
 
 - If fd 3 is absent, closes, emits a malformed record, or uses an unknown version, ACP continues. The UI shows at most one sanitized degradation diagnostic and falls back to committed ACP output plus JSONL tool/usage events.
+- If fd 4 is absent or a barrier cannot be acknowledged, the client disables subsequent live rendering before sending the next prompt and continues over ACP. It never guesses which prompt owns delayed fd 3 records.
 - If JSONL is unavailable, live text and ACP still work; history and fallback tool telemetry become unavailable with a bounded diagnostic.
 - If ACP fails, the operation follows the existing outcome-unknown policy. Live text is retained as visibly uncommitted evidence, and no automatic retry occurs.
 - If the live stream ends after ACP has committed, the committed transcript is unchanged.
@@ -200,6 +204,7 @@ The benchmark reports trends and regressions; it does not claim that dsh-tui can
 
 - `DEEPSEEK_API_KEY` remains process-only. No design or implementation file stores, prints, snapshots, or measures it.
 - The live tap removes reasoning content before crossing fd 3. Parent diagnostics never include the rejected raw line.
+- The fd 4 control protocol carries only a wire version, readiness/barrier kind, and bounded integer id; it never carries prompt text, model text, tool data, credentials, or session history.
 - All live text, tool names, tool summaries, errors, and committed output pass through the existing terminal-control sanitizer before rendering.
 - Live record lines and partial buffers have explicit byte limits so an unexpected backend cannot grow memory without bound.
 - Hermes and pi are MIT-licensed references. The implementation should independently reproduce the relevant patterns. If a non-trivial source fragment is copied verbatim, retain its MIT notice in a shipped `THIRD_PARTY_NOTICES.md`; branding and artwork are never copied.
