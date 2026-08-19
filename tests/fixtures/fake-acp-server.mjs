@@ -35,6 +35,10 @@ if (scenario === "live-degraded") {
 }
 
 if (scenario === "stubborn") process.on("SIGTERM", () => {})
+if (scenario === "stdin-close") {
+  setInterval(() => {}, 1_000)
+  setTimeout(() => process.exit(0), 1_000)
+}
 
 function send(message) {
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`)
@@ -72,6 +76,10 @@ input.on("line", (line) => {
     activeSessionId = `fake-${String(nextSession++).padStart(3, "0")}`
     if (scenario === "slow-start-live") setTimeout(() => result(frame.id, { sessionId: activeSessionId }), 350)
     else result(frame.id, { sessionId: activeSessionId })
+    if (scenario === "stdin-close") setTimeout(() => {
+      process.stdin.destroy()
+      try { closeSync(0) } catch {}
+    }, 10)
     return
   }
 

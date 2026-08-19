@@ -127,6 +127,22 @@ describe("AcpClient", () => {
     await acp.close()
   })
 
+  it("terminates and reaps a backend whose stdin fails while it remains alive", async () => {
+    const signals: Array<NodeJS.Signals | null> = []
+    const events = createEvents({
+      onBackendExit(info) { signals.push(info.signal) },
+    })
+    const acp = client("stdin-close", events, { "session/prompt": 2_000 })
+    await acp.newSession()
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    await expect(acp.prompt("cannot arrive")).rejects.toThrow(/stdin|exited|unknown/i)
+    await waitFor(() => signals.length === 1)
+
+    expect(signals).toEqual(["SIGTERM"])
+    await expect(acp.close()).resolves.toBeUndefined()
+  })
+
   it("continues through malformed and oversized live records without leaking their content", async () => {
     const events = createEvents()
     const acp = client("live-degraded", events)

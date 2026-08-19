@@ -308,7 +308,14 @@ export class AcpClient {
       if (diagnostic) this.events.onDiagnostic(`backend: ${diagnostic}`)
     })
     child.stdin.on("error", (error) => {
-      this.finalizeProcess(child, new Error(`ACP stdin failed: ${safeErrorText(error)}; outcome unknown`), child.exitCode, child.signalCode)
+      if (this.process !== child) return
+      this.events.onDiagnostic(`backend stdin failed: ${safeErrorText(error)}; terminating backend`)
+      this.tryLifecycleAction("ACP stdin failure termination failed", () => { child.kill() })
+      const force = setTimeout(() => {
+        if (this.process !== child || child.exitCode !== null || child.signalCode !== null) return
+        this.tryLifecycleAction("ACP stdin failure force termination failed", () => { child.kill("SIGKILL") })
+      }, 250)
+      force.unref()
     })
     child.once("error", (error) => {
       this.events.onDiagnostic(`backend start/error: ${safeErrorText(error)}`)

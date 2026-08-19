@@ -522,6 +522,7 @@ Commit: `docs: complete the live experience implementation`
 - [x] Fence prompt boundaries with an fd 4 barrier so delayed `turn-start` records cannot reopen an interrupted turn.
 - [x] Keep a cancellation that wins during the barrier from duplicating the previous committed answer.
 - [x] Revalidate the backend process and session after every barrier so a dead session is never sent to a replacement child.
+- [x] Preserve and terminate the child on stdin transport failure so cleanup can reap it without orphaning the backend.
 
 ---
 
