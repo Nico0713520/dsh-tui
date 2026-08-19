@@ -92,7 +92,11 @@ describe("AssistantStream", () => {
       step: 1,
       usage: { inputTokens: 1 },
     }).acceptedRecord).toBe(false)
+    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 4, kind: "turn-start", turn: 2 }).acceptedRecord).toBe(false)
+
+    stream.preparePrompt()
+    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 5, kind: "turn-start", turn: 2 }).acceptedRecord).toBe(true)
     expect(stream.reset()).toEqual({ sessionId: null, turn: null, text: "", activity: "idle", committed: false, interruption: null, acceptedRecord: false })
-    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 4, kind: "text-delta", turn: 1, step: 1, index: 0, text: "late" }).text).toBe("")
+    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 6, kind: "text-delta", turn: 1, step: 1, index: 0, text: "late" }).text).toBe("")
   })
 })

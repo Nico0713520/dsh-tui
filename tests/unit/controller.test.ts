@@ -395,6 +395,29 @@ describe("AppController", () => {
     expect(harness.promptCalls).toEqual(["side effect"])
   })
 
+  it("opens live streaming for the next prompt only after an interrupted turn", async () => {
+    const harness = createHarness()
+    harness.deferPrompt()
+    await harness.controller.start()
+    const first = harness.controller.submit("first")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 1, kind: "turn-start", turn: 1 })
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 2, kind: "text-delta", turn: 1, step: 1, index: 0, text: "partial" })
+    harness.finishPrompt("cancelled")
+    await first
+
+    const second = harness.controller.submit("second")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 3, kind: "text-delta", turn: 1, step: 1, index: 0, text: "stale" })
+    expect(harness.controller.state.partialAssistantText).toBe("")
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 4, kind: "turn-start", turn: 2 })
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 5, kind: "text-delta", turn: 2, step: 1, index: 0, text: "fresh" })
+    expect(harness.controller.state.partialAssistantText).toBe("fresh")
+
+    harness.finishPrompt()
+    await second
+  })
+
   it("fails closed for permission decisions and closes without returning to ready", async () => {
     const harness = createHarness()
     await harness.controller.start()

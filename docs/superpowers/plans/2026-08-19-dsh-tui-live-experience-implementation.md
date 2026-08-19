@@ -513,6 +513,7 @@ Commit: `docs: complete the live experience implementation`
 - [x] Keep the compact activity segment fixed-width and prove paint timing only through the PTY seam.
 - [x] Accept same-turn metadata that crosses ACP settlement, without reopening interrupted or newer turns.
 - [x] Pad activity labels by terminal cell width and reserve model space below 32 columns.
+- [x] Keep interruption sealed until the controller explicitly prepares the user's next prompt.
 
 ---
 

@@ -165,6 +165,7 @@ export class AppController {
 
   private async runPrompt(value: string): Promise<void> {
     this.committedAssistantText = ""
+    this.assistantStream.preparePrompt()
     this.turnPerf.start()
     this.perfReported = false
     this.setState({
