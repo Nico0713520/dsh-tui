@@ -112,4 +112,27 @@ describe("AssistantStream", () => {
     expect(stream.apply({ v: 1, sessionId: "s-1", seq: 1, kind: "text-delta", turn: 1, step: 1, index: 0, text: "old" }).acceptedRecord).toBe(false)
     expect(stream.apply({ v: 1, sessionId: "s-1", seq: 2, kind: "turn-start", turn: 2 }).acceptedRecord).toBe(true)
   })
+
+  it("binds the next prompt to the same backend turn after a turnless cancellation", () => {
+    const stream = createAssistantStream()
+    stream.begin("s-1")
+    stream.preparePrompt()
+    stream.interrupt("cancelled")
+    stream.preparePrompt()
+
+    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 1, kind: "turn-start", turn: 1 })).toMatchObject({
+      turn: 1,
+      acceptedRecord: true,
+    })
+    expect(stream.apply({
+      v: 1,
+      sessionId: "s-1",
+      seq: 2,
+      kind: "text-delta",
+      turn: 1,
+      step: 1,
+      index: 0,
+      text: "current",
+    })).toMatchObject({ text: "current", acceptedRecord: true })
+  })
 })

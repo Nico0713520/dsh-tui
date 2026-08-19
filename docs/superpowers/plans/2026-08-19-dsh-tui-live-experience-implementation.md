@@ -517,6 +517,7 @@ Commit: `docs: complete the live experience implementation`
 - [x] Track the prepared prompt turn even when the interrupted turn emitted no live record.
 - [x] Preserve ACP commitment when the first late record is tool/usage metadata.
 - [x] Budget compact phase, model, and interruption segments together on narrow terminals.
+- [x] Bind prepared prompts to observed backend turns so a turnless cancellation cannot disable later live streaming.
 
 ---
 

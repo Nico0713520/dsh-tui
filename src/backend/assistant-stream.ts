@@ -22,7 +22,9 @@ export interface AssistantStream {
 export function createAssistantStream(): AssistantStream {
   let state: Omit<AssistantStreamSnapshot, "acceptedRecord"> = emptySnapshot()
   let highestSeq = -1
-  let promptTurn = 0
+  let promptTurnFloor: number | null = null
+  let promptObservedTurn = false
+  let requireTurnStart = false
   const blocks = new Map<string, { turn: number; step: number; index: number; text: string }>()
 
   const snapshot = (acceptedRecord = false): AssistantStreamSnapshot => Object.freeze({ ...state, acceptedRecord })
@@ -31,13 +33,16 @@ export function createAssistantStream(): AssistantStream {
     begin(sessionId) {
       blocks.clear()
       highestSeq = -1
-      promptTurn = 0
+      promptTurnFloor = null
+      promptObservedTurn = false
+      requireTurnStart = false
       state = { ...emptySnapshot(), sessionId }
       return snapshot()
     },
     preparePrompt() {
       blocks.clear()
-      promptTurn += 1
+      promptTurnFloor = state.turn === null ? 0 : state.turn + 1
+      promptObservedTurn = false
       state = { ...state, text: "", activity: "idle", committed: false, interruption: null }
       return snapshot()
     },
@@ -46,11 +51,31 @@ export function createAssistantStream(): AssistantStream {
       if (state.interruption !== null) return snapshot()
       if (record.seq <= highestSeq) return snapshot()
       highestSeq = record.seq
-      if (promptTurn > 0 && record.turn !== promptTurn) return snapshot()
+      const metadataOnly = record.kind === "tool-start" || record.kind === "tool-end" || record.kind === "usage"
+      if (state.committed && !metadataOnly) return snapshot()
+      if (promptTurnFloor !== null) {
+        if (record.turn < promptTurnFloor) return snapshot()
+        if (requireTurnStart && record.kind !== "turn-start") return snapshot()
+        promptTurnFloor = null
+        promptObservedTurn = true
+        requireTurnStart = false
+        if (state.committed) state = { ...state, turn: record.turn }
+        else {
+          blocks.clear()
+          state = {
+            ...state,
+            turn: record.turn,
+            text: "",
+            activity: "idle",
+            committed: false,
+            interruption: null,
+          }
+        }
+      }
       if (state.committed) {
-        const metadataOnly = record.kind === "tool-start" || record.kind === "tool-end" || record.kind === "usage"
-        if (!metadataOnly || (state.turn !== null && record.turn !== state.turn)) return snapshot()
+        if (state.turn !== null && record.turn !== state.turn) return snapshot()
         if (state.turn === null) state = { ...state, turn: record.turn }
+        promptObservedTurn = true
         return snapshot(true)
       }
       if (state.turn !== null && record.turn < state.turn) return snapshot()
@@ -65,6 +90,7 @@ export function createAssistantStream(): AssistantStream {
           interruption: null,
         }
       }
+      promptObservedTurn = true
       if (record.kind === "turn-start") return snapshot(true)
       if (record.kind === "activity") {
         state = { ...state, activity: record.activity }
@@ -96,13 +122,17 @@ export function createAssistantStream(): AssistantStream {
       return snapshot()
     },
     interrupt(kind) {
+      if (!promptObservedTurn) requireTurnStart = true
+      promptTurnFloor = null
       state = { ...state, activity: "idle", committed: false, interruption: kind }
       return snapshot()
     },
     reset() {
       blocks.clear()
       highestSeq = -1
-      promptTurn = 0
+      promptTurnFloor = null
+      promptObservedTurn = false
+      requireTurnStart = false
       state = emptySnapshot()
       return snapshot()
     },
