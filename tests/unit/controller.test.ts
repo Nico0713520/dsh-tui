@@ -14,7 +14,7 @@ const config: AppConfig = {
   perf: false,
 }
 
-function createHarness() {
+function createHarness(configOverride: Partial<AppConfig> = {}) {
   let promptResolve: ((value: { stopReason: string }) => void) | undefined
   let promptImpl: ((text: string) => Promise<{ stopReason: string }>) | undefined
   let listHistoryImpl: () => Promise<SessionInfo[]> = async () => []
@@ -68,7 +68,7 @@ function createHarness() {
     logs,
     view,
     renders,
-    controller: new AppController({ config, backend, logs, view }),
+    controller: new AppController({ config: { ...config, ...configOverride }, backend, logs, view }),
     promptCalls,
     setHistory(options: {
       choice?: HistoryChoice
@@ -107,6 +107,25 @@ function createHarness() {
 }
 
 describe("AppController", () => {
+  it("emits a sanitized performance report only when enabled", async () => {
+    const harness = createHarness({ perf: true })
+    harness.deferPrompt()
+    await harness.controller.start()
+    const prompt = harness.controller.submit("secret prompt")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 1, kind: "turn-start", turn: 1 })
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 2, kind: "text-delta", turn: 1, step: 1, index: 0, text: "answer" })
+    harness.controller.onLiveTextPaint()
+    harness.controller.onAssistantText("answer")
+    harness.finishPrompt()
+    await prompt
+
+    const report = harness.controller.state.transcript.find((item) => item.kind === "diagnostic" && item.text.startsWith("[perf]"))
+    expect(report).toBeDefined()
+    expect(report && "text" in report ? report.text : "").toMatch(/backend \d+ms.*paint \d+ms.*settle \d+ms/)
+    expect(report && "text" in report ? report.text : "").not.toContain("secret prompt")
+  })
+
   it("queues one editable startup prompt and sends its latest value exactly once", async () => {
     const harness = createHarness()
     const releaseSession = harness.deferSession()

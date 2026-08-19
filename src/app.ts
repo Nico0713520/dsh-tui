@@ -125,6 +125,7 @@ export async function runApp(config: AppConfig): Promise<number> {
   view.bind({
     onSubmit: (text) => { void controller.submit(text) },
     onDraft: (text) => controller.updateDraft(text),
+    onLiveTextPaint: () => controller.onLiveTextPaint(),
     onCancel: () => controller.cancel(),
     onHistory: () => { void controller.openHistory() },
     onClose: () => { void finish(0) },

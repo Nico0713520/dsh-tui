@@ -21,10 +21,12 @@ import { c, markdownTheme, MARK_TOOL, MARK_TOOL_ERR, MARK_USER, selectTheme, STA
 import { showModalList } from "./modal-list.ts"
 import { createStreamingMarkdownView } from "./streaming-markdown.ts"
 import { DeepPulseClock, ElapsedClock, deepPulseFrame, type DeepPulseTick } from "./deep-pulse.ts"
+import { LatestRenderGate, type DrainSource } from "./render-backpressure.ts"
 
 export interface ViewActions {
   onSubmit(text: string): void
   onDraft(text: string): void
+  onLiveTextPaint(): void
   onCancel(): void
   onHistory(): void
   onClose(): void
@@ -109,10 +111,17 @@ export class AppView implements ControllerView {
   private readonly tty: boolean
   private readonly pulseClock: DeepPulseClock
   private readonly elapsedClock: ElapsedClock
+  private readonly renderGate: LatestRenderGate<AppState>
   private pulseTick: DeepPulseTick = { frame: 0, completion: false, settled: false }
   private elapsedSeconds = 0
 
-  constructor(options: { mode: RunMode; model: string; motion: MotionPreference; tty?: boolean }) {
+  constructor(options: {
+    mode: RunMode
+    model: string
+    motion: MotionPreference
+    tty?: boolean
+    output?: DrainSource
+  }) {
     this.mode = options.mode
     this.model = options.model
     this.motion = options.motion
@@ -127,6 +136,7 @@ export class AppView implements ControllerView {
       this.updateStatus()
       this.tui.requestRender()
     })
+    this.renderGate = new LatestRenderGate(options.output ?? process.stdout, (state) => this.renderState(state))
     const editorTheme: EditorTheme = {
       borderColor: (text) => c.dim(text),
       selectList: selectTheme,
@@ -158,12 +168,18 @@ export class AppView implements ControllerView {
     this.noticeTimer = null
     this.pulseClock.dispose()
     this.elapsedClock.dispose()
+    this.renderGate.dispose()
     this.removeInputListener?.()
     this.removeInputListener = null
     this.tui.stop()
   }
 
   render(state: AppState): void {
+    const priority = state.phase === "ready" || state.phase === "failed" || state.phase === "closing"
+    this.renderGate.submit(state, priority)
+  }
+
+  private renderState(state: AppState): void {
     const previous = this.currentState
     this.currentState = state
     const wasActive = previous?.phase === "working" || previous?.phase === "cancelling"
@@ -199,6 +215,7 @@ export class AppView implements ControllerView {
     this.updateHeader()
     this.updateStatus()
     this.tui.requestRender()
+    if (!previous?.partialAssistantText && state.partialAssistantText) this.actions?.onLiveTextPaint()
   }
 
   async requestApproval(request: ApprovalRequest): Promise<PermissionDecision> {

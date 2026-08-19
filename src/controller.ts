@@ -5,6 +5,7 @@ import type { PermissionDecision } from "./backend/acp-client.ts"
 import type { HistoryEntry, SessionInfo, SessionLogEvent, SessionLogWatchOptions } from "./backend/session-log.ts"
 import { createAssistantStream } from "./backend/assistant-stream.ts"
 import type { DshLiveRecord } from "./backend/live-record.ts"
+import { TurnPerf } from "./perf.ts"
 
 export type AppPhase = "starting" | "ready" | "working" | "cancelling" | "failed" | "closing"
 
@@ -86,6 +87,8 @@ export class AppController {
   private readonly seenToolEnds = new Set<string>()
   private readonly liveTools = new Map<string, { name: string; arguments: string }>()
   private readonly seenUsageSteps = new Set<string>()
+  private readonly turnPerf = new TurnPerf()
+  private perfReported = false
   private stateValue: AppState = {
     phase: "starting",
     sessionId: null,
@@ -159,6 +162,8 @@ export class AppController {
 
   private async runPrompt(value: string): Promise<void> {
     this.committedAssistantText = ""
+    this.turnPerf.start()
+    this.perfReported = false
     this.setState({
       phase: "working",
       backendMessage: null,
@@ -171,11 +176,13 @@ export class AppController {
     try {
       const result = await this.backend.prompt(value)
       if (this.isClosing() || this.stateValue.phase === "failed") return
+      this.turnPerf.mark("settled")
       if (result.stopReason === "cancelled") {
         const snapshot = this.assistantStream.interrupt("cancelled")
         this.setState({ partialAssistantText: snapshot.text, interruption: "cancelled" })
       }
       this.finishAssistant(result.stopReason)
+      this.reportPerf()
       this.setState({
         phase: "ready",
         activity: { kind: "idle" },
@@ -183,7 +190,9 @@ export class AppController {
       })
     } catch (error) {
       if (this.isClosing() || this.stateValue.phase === "failed") return
+      this.turnPerf.mark("settled")
       this.finishAssistant("")
+      this.reportPerf()
       this.fail(error)
     }
   }
@@ -299,6 +308,7 @@ export class AppController {
 
   onAssistantText(text: string): void {
     if (this.stateValue.phase !== "working" && this.stateValue.phase !== "cancelling") return
+    this.turnPerf.mark("acp-committed")
     this.committedAssistantText += text
     const snapshot = this.assistantStream.reconcileCommitted(this.committedAssistantText)
     this.setState({ partialAssistantText: snapshot.text, activity: { kind: "responding" } })
@@ -306,8 +316,11 @@ export class AppController {
 
   onLiveRecord(record: DshLiveRecord): void {
     if (this.stateValue.phase !== "working" && this.stateValue.phase !== "cancelling") return
+    this.turnPerf.mark("first-live-event")
     const snapshot = this.assistantStream.apply(record)
+    if (snapshot.text) this.turnPerf.mark("first-live-text")
     if (record.kind === "tool-start") {
+      this.turnPerf.mark("first-visible-activity")
       this.liveTools.set(record.callId, { name: record.name, arguments: record.arguments })
       if (!this.seenToolStarts.has(record.callId)) {
         this.seenToolStarts.add(record.callId)
@@ -322,6 +335,7 @@ export class AppController {
       return
     }
     if (record.kind === "tool-end") {
+      this.turnPerf.mark("first-visible-activity")
       const tool = this.liveTools.get(record.callId)
       if (!this.seenToolEnds.has(record.callId)) {
         this.seenToolEnds.add(record.callId)
@@ -349,7 +363,12 @@ export class AppController {
       : snapshot.activity === "responding"
         ? { kind: "responding" }
         : this.stateValue.activity
+    if (snapshot.activity !== "idle") this.turnPerf.mark("first-visible-activity")
     this.setState({ partialAssistantText: snapshot.text, activity })
+  }
+
+  onLiveTextPaint(): void {
+    this.turnPerf.mark("first-live-text-paint")
   }
 
   onSessionChanged(sessionId: string): void {
@@ -378,6 +397,8 @@ export class AppController {
       this.setState({ partialAssistantText: snapshot.text, interruption: "outcome-unknown", activity: { kind: "idle" } })
     }
     this.finishAssistant("")
+    this.turnPerf.mark("settled")
+    this.reportPerf()
     this.fail(new Error(info.outcomeUnknown ? "Backend exited; prompt outcome is unknown." : "Backend exited."))
   }
 
@@ -415,6 +436,14 @@ export class AppController {
     this.seenToolEnds.clear()
     this.liveTools.clear()
     this.seenUsageSteps.clear()
+  }
+
+  private reportPerf(): void {
+    if (!this.config.perf || this.perfReported) return
+    const report = this.turnPerf.report()
+    if (!report) return
+    this.perfReported = true
+    this.addDiagnostic(`[perf] ${report}`)
   }
 
   private finishAssistant(_stopReason: string): void {

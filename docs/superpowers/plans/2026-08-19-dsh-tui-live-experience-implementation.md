@@ -413,33 +413,33 @@ Commit: `feat: add a non-blocking Deep Pulse entrance`
 - Consumes: named monotonic turn marks and paint notifications.
 - Produces: sanitized backend-wait/frontend-paint metrics only when `DSH_TUI_PERF=1`, plus newest-state coalescing while stdout needs drain.
 
-- [ ] **Step 1: Write a failing perf report test**
+- [x] **Step 1: Write a failing perf report test**
 
 Use a fake clock with submit at 100, first live event at 140, first text at 160, first text paint at 172, ACP commit at 300, and settlement at 310. Assert the report is exactly `backend 40ms · text 60ms · paint 12ms · settle 210ms` and contains no event payload.
 
-- [ ] **Step 2: Run the test and verify red**
+- [x] **Step 2: Run the test and verify red**
 
 Run: `npx vitest run tests/unit/perf.test.ts`
 
 Expected: FAIL because `src/perf.ts` does not exist.
 
-- [ ] **Step 3: Implement monotonic marks and sanitized report generation**
+- [x] **Step 3: Implement monotonic marks and sanitized report generation**
 
 Expose `TurnPerf.start(now)`, `mark(name, now)`, `report()`, and `reset()`. Store numbers only. Ignore duplicate marks after their first value and omit unavailable segments.
 
-- [ ] **Step 4: Wire controller and paint marks**
+- [x] **Step 4: Wire controller and paint marks**
 
 Mark submit, first live event, first visible activity, first live text, ACP commit, and settlement in the controller; let the view acknowledge the first frame containing the current live text; expose only the compact report when perf mode is enabled.
 
-- [ ] **Step 5: Coalesce state while terminal output is backpressured**
+- [x] **Step 5: Coalesce state while terminal output is backpressured**
 
 In `AppView`, when `process.stdout.writableNeedDrain` is true, retain only the latest state and install one `drain` listener. Input-triggered editor rendering remains owned by pi-tui. Flush the latest state after drain; always flush a final committed state; remove the listener on stop.
 
-- [ ] **Step 6: Add fake-backend latency and backpressure tests**
+- [x] **Step 6: Add fake-backend latency and backpressure tests**
 
 Drive 100 live snapshots through the view while a fake writable is blocked, release drain, and assert only the newest snapshot renders. Run 50 deterministic event-to-paint samples and assert local P95 is at most 50 ms without network access.
 
-- [ ] **Step 7: Run checks and commit**
+- [x] **Step 7: Run checks and commit**
 
 Run: `npx vitest run tests/unit/perf.test.ts tests/unit/controller.test.ts tests/unit/app-view.test.ts && npm run typecheck`
 
