@@ -113,6 +113,20 @@ describe("AcpClient", () => {
     await acp.close()
   })
 
+  it("does not reuse a dead session when the backend exits during a live barrier", async () => {
+    const events = createEvents()
+    const acp = client("barrier-exit", events, { "session/prompt": 500 })
+    await acp.newSession()
+    await expect(acp.prompt("first")).resolves.toEqual({ stopReason: "end_turn" })
+
+    await expect(acp.prompt("second")).rejects.toThrow(/exited|synchronization|session/i)
+    await waitFor(() => events.exits.length === 1)
+
+    expect(events.exits).toEqual([{ outcomeUnknown: false }])
+    expect(acp.activeSessionId).toBeNull()
+    await acp.close()
+  })
+
   it("continues through malformed and oversized live records without leaking their content", async () => {
     const events = createEvents()
     const acp = client("live-degraded", events)

@@ -480,6 +480,32 @@ describe("AppController", () => {
     await second
   })
 
+  it("does not duplicate the previous answer when cancellation wins during live synchronization", async () => {
+    const harness = createHarness()
+    harness.deferPrompt()
+    await harness.controller.start()
+    const first = harness.controller.submit("first")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    harness.controller.onAssistantText("previous answer")
+    harness.finishPrompt()
+    await first
+
+    const releaseLiveSync = harness.deferLiveSync()
+    const second = harness.controller.submit("cancel before send")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    harness.controller.cancel()
+    releaseLiveSync()
+    await second
+
+    expect(harness.promptCalls).toEqual(["first"])
+    expect(harness.controller.state.transcript).toEqual([
+      { kind: "user", text: "first" },
+      { kind: "assistant", text: "previous answer" },
+      { kind: "user", text: "cancel before send" },
+    ])
+    expect(harness.controller.state.interruption).toBe("cancelled")
+  })
+
   it("fails closed for permission decisions and closes without returning to ready", async () => {
     const harness = createHarness()
     await harness.controller.start()

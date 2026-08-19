@@ -64,7 +64,7 @@ export class AcpClient {
   private liveBoundaryPrepared = false
   private nextLiveBarrierId = 1
   private readonly pendingLiveBarriers = new Map<number, {
-    resolve(): void
+    resolve(acknowledged: boolean): void
     timer: ReturnType<typeof setTimeout>
   }>()
   private nextId = 1
@@ -135,6 +135,7 @@ export class AcpClient {
   }
 
   async synchronizeLiveEvents(): Promise<void> {
+    const child = this.process
     if (this.liveBoundaryPrepared || !this.liveBoundaryRequired) {
       this.liveBoundaryPrepared = true
       return
@@ -143,12 +144,13 @@ export class AcpClient {
     if (!this.liveControlReady || !control || control.destroyed || !control.writable) {
       this.reportLivePipeFailure("live event synchronization unavailable; continuing with ACP")
       this.stopLiveEvents()
+      if (child) await this.waitForExit(child, 100)
       return
     }
     const id = this.nextLiveBarrierId++
-    await new Promise<void>((resolve) => {
+    const acknowledged = await new Promise<boolean>((resolve) => {
       let settled = false
-      const finish = () => {
+      const finish = (barrierAcknowledged: boolean) => {
         if (settled) return
         settled = true
         const pending = this.pendingLiveBarriers.get(id)
@@ -156,12 +158,12 @@ export class AcpClient {
         if (pending) clearTimeout(pending.timer)
         this.liveBoundaryRequired = false
         this.liveBoundaryPrepared = true
-        resolve()
+        resolve(barrierAcknowledged)
       }
       const timer = setTimeout(() => {
         this.reportLivePipeFailure("live event synchronization timed out; continuing with ACP")
         this.stopLiveEvents()
-        finish()
+        finish(false)
       }, 1_000)
       this.pendingLiveBarriers.set(id, { resolve: finish, timer })
       try {
@@ -169,9 +171,10 @@ export class AcpClient {
       } catch (error) {
         this.reportLivePipeFailure(`live event synchronization failed: ${safeErrorText(error)}`)
         this.stopLiveEvents()
-        finish()
+        finish(false)
       }
     })
+    if (!acknowledged && child) await this.waitForExit(child, 100)
   }
 
   async prompt(text: string): Promise<{ stopReason: string }> {
@@ -182,8 +185,18 @@ export class AcpClient {
     this.promptCancelRequested = false
     try {
       const sessionId = this.sessionId ?? await this.createSession()
+      const child = this.process
       await this.synchronizeLiveEvents()
       this.liveBoundaryPrepared = false
+      if (!child
+        || this.process !== child
+        || this.sessionId !== sessionId
+        || child.exitCode !== null
+        || child.signalCode !== null
+        || child.stdin.destroyed
+        || !child.stdin.writable) {
+        throw new Error("ACP backend or session changed during live event synchronization")
+      }
       if (this.promptCancelRequested) return { stopReason: "cancelled" }
       this.promptRequestSent = true
       const result = await this.call("session/prompt", {
@@ -267,7 +280,7 @@ export class AcpClient {
         sessionId: () => this.sessionId,
         onRecord: (record) => this.events.onLiveRecord?.(record),
         onControlReady: () => { this.liveControlReady = true },
-        onBarrier: (id) => this.pendingLiveBarriers.get(id)?.resolve(),
+        onBarrier: (id) => this.pendingLiveBarriers.get(id)?.resolve(true),
         onDiagnostic: (message) => this.events.onDiagnostic(message),
       })
       this.liveOutput.on("data", (chunk: Buffer | string) => this.liveDecoder?.push(chunk))
@@ -293,6 +306,9 @@ export class AcpClient {
     child.stderr.on("data", (chunk: Buffer | string) => {
       const diagnostic = safeErrorText(String(chunk), 220)
       if (diagnostic) this.events.onDiagnostic(`backend: ${diagnostic}`)
+    })
+    child.stdin.on("error", (error) => {
+      this.finalizeProcess(child, new Error(`ACP stdin failed: ${safeErrorText(error)}; outcome unknown`), child.exitCode, child.signalCode)
     })
     child.once("error", (error) => {
       this.events.onDiagnostic(`backend start/error: ${safeErrorText(error)}`)
@@ -379,7 +395,7 @@ export class AcpClient {
     for (const [id, pending] of this.pendingLiveBarriers) {
       this.pendingLiveBarriers.delete(id)
       clearTimeout(pending.timer)
-      pending.resolve()
+      pending.resolve(false)
     }
     if (!control) return
     control.removeAllListeners("error")

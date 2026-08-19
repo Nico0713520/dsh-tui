@@ -520,6 +520,8 @@ Commit: `docs: complete the live experience implementation`
 - [x] Budget compact phase, model, and interruption segments together on narrow terminals.
 - [x] Bind prepared prompts to observed backend turns so a turnless cancellation cannot disable later live streaming.
 - [x] Fence prompt boundaries with an fd 4 barrier so delayed `turn-start` records cannot reopen an interrupted turn.
+- [x] Keep a cancellation that wins during the barrier from duplicating the previous committed answer.
+- [x] Revalidate the backend process and session after every barrier so a dead session is never sent to a replacement child.
 
 ---
 

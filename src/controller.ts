@@ -181,9 +181,7 @@ export class AppController {
       await this.backend.synchronizeLiveEvents?.()
       if (this.isClosing() || this.hasFailed()) return
       if (this.stateValue.phase === "cancelling") {
-        const snapshot = this.assistantStream.interrupt("cancelled")
-        this.setState({ partialAssistantText: snapshot.text, interruption: "cancelled" })
-        this.finishAssistant("cancelled")
+        this.setState({ partialAssistantText: "", interruption: "cancelled" })
         this.reportPerf()
         this.setState({ phase: "ready", activity: { kind: "idle" }, backendMessage: "interrupted" })
         return

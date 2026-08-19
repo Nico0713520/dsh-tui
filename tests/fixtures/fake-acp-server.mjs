@@ -24,6 +24,7 @@ control.on("line", (line) => {
     return
   }
   if (request?.v === 1 && request.kind === "barrier" && Number.isSafeInteger(request.id) && request.id >= 0) {
+    if (scenario === "barrier-exit") process.exit(18)
     live.write(`${JSON.stringify({ v: 1, kind: "barrier", id: request.id })}\n`)
   }
 })
