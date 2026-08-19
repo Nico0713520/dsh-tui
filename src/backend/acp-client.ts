@@ -157,8 +157,22 @@ export class AcpClient {
     if (this.closePromise) return this.closePromise
     this.closed = true
     this.closing = true
+    this.stopLiveEvents()
     this.closePromise = this.dispose()
     return this.closePromise
+  }
+
+  stopLiveEvents(): void {
+    const output = this.liveOutput
+    const decoder = this.liveDecoder
+    this.liveOutput = null
+    this.liveDecoder = null
+    decoder?.discard()
+    if (!output) return
+    output.removeAllListeners("data")
+    output.removeAllListeners("end")
+    output.removeAllListeners("error")
+    output.destroy()
   }
 
   private ensureProcess(): ChildProcessWithoutNullStreams {

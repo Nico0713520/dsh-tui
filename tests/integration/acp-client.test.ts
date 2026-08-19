@@ -106,6 +106,19 @@ describe("AcpClient", () => {
     await acp.close()
   })
 
+  it("can detach the live reader before closing the ACP child", async () => {
+    const events = createEvents()
+    const acp = client("live-stream", events)
+    await acp.newSession()
+
+    acp.stopLiveEvents()
+    await expect(acp.prompt("fallback")).resolves.toEqual({ stopReason: "end_turn" })
+
+    expect(events.live).toEqual([])
+    expect(events.chunks).toEqual(["hello!"])
+    await acp.close()
+  })
+
   it("rejects a second prompt before writing it", async () => {
     const acp = client("delayed", createEvents())
     const first = acp.prompt("first")

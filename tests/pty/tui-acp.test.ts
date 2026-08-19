@@ -37,7 +37,7 @@ describe("real ACP TUI", () => {
   it("keeps one editable startup prompt and shows activity before final text", async () => {
     const root = await mkdtemp(join(tmpdir(), "dsh-pty-startup-"))
     const terminal = spawnTui(acpArgs(root), {
-      env: { FAKE_ACP_SCENARIO: "slow-start-live", DSH_TUI_MOTION: "full" },
+      env: { FAKE_ACP_SCENARIO: "slow-start-live", DSH_TUI_MOTION: "full", DSH_TUI_PERF: "1" },
       cols: 80,
       rows: 24,
     })
@@ -49,6 +49,7 @@ describe("real ACP TUI", () => {
       const liveStart = terminal.rawLength()
       await terminal.waitForText("thinking", 8_000, liveStart)
       await terminal.waitForText("queued:first edited", 8_000, liveStart)
+      await terminal.waitForText("paint ", 8_000, liveStart)
 
       const liveOutput = terminal.raw().slice(liveStart)
       expect(liveOutput.indexOf("thinking")).toBeLessThan(liveOutput.indexOf("queued:first edited"))

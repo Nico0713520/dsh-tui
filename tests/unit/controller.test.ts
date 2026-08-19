@@ -25,9 +25,11 @@ function createHarness(configOverride: Partial<AppConfig> = {}) {
   let activeSessionId: string | null = null
   let sessionGate: Promise<void> | null = null
   let releaseSession: (() => void) | undefined
+  let rejectSession: ((error: Error) => void) | undefined
   const renders: AppState[] = []
   const promptCalls: string[] = []
-  const backend: BackendPort = {
+  const cleanupOrder: string[] = []
+  const backend: BackendPort & { stopLiveEvents(): void } = {
     get activeSessionId() { return activeSessionId },
     async start() {},
     async newSession() {
@@ -44,7 +46,8 @@ function createHarness(configOverride: Partial<AppConfig> = {}) {
     cancel() {
       promptResolve?.({ stopReason: "cancelled" })
     },
-    async close() {},
+    stopLiveEvents() { cleanupOrder.push("backend-live") },
+    async close() { cleanupOrder.push("backend") },
   }
   interface FakeLogs extends SessionLogPort {
     watched?: SessionLogWatchOptions
@@ -52,16 +55,18 @@ function createHarness(configOverride: Partial<AppConfig> = {}) {
   }
   const logs: FakeLogs = {
     watch(options) { logs.watched = options },
-    stop() {},
+    stop() { cleanupOrder.push("logs") },
     lookupCall() { return { name: "bash", arguments: JSON.stringify({ command: "rm -rf ." }) } },
     async listHistory() { return listHistoryImpl() },
     async loadHistory() { return loadHistoryImpl() },
     emit(event) { logs.watched?.onEvent(event) },
   }
-  const view: ControllerView = {
+  const view: ControllerView & { prepareShutdown(): void; dismissOverlays(): void } = {
     render(state) { renders.push(state) },
     async requestApproval(request): Promise<PermissionDecision> { return approvalImpl(request) },
     async chooseHistory() { return chooseHistoryImpl() },
+    prepareShutdown() { cleanupOrder.push("view-timers") },
+    dismissOverlays() { cleanupOrder.push("view-overlays") },
   }
   return {
     backend,
@@ -70,6 +75,7 @@ function createHarness(configOverride: Partial<AppConfig> = {}) {
     renders,
     controller: new AppController({ config: { ...config, ...configOverride }, backend, logs, view }),
     promptCalls,
+    cleanupOrder,
     setHistory(options: {
       choice?: HistoryChoice
       sessions?: SessionInfo[]
@@ -94,11 +100,18 @@ function createHarness(configOverride: Partial<AppConfig> = {}) {
       })
     },
     deferSession() {
-      sessionGate = new Promise((resolve) => { releaseSession = resolve })
+      sessionGate = new Promise((resolve, reject) => {
+        releaseSession = resolve
+        rejectSession = reject
+      })
       return () => {
         releaseSession?.()
         sessionGate = null
       }
+    },
+    failSession(error = new Error("startup failed")) {
+      rejectSession?.(error)
+      sessionGate = null
     },
     finishPrompt(stopReason = "end_turn") {
       promptResolve?.({ stopReason })
@@ -144,6 +157,21 @@ describe("AppController", () => {
     expect(harness.controller.state.transcript).toEqual([
       { kind: "user", text: "first edited" },
     ])
+  })
+
+  it("keeps a failed startup queue synchronized with later editor changes", async () => {
+    const harness = createHarness()
+    harness.deferSession()
+    const starting = harness.controller.start()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await harness.controller.submit("first")
+
+    harness.failSession()
+    await starting
+    expect(harness.controller.state.phase).toBe("failed")
+
+    harness.controller.updateDraft("latest edit")
+    expect(harness.controller.state.queuedPrompt).toBe("latest edit")
   })
 
   it("starts ready, submits one prompt, and renders streamed assistant text", async () => {
@@ -213,6 +241,18 @@ describe("AppController", () => {
     harness.controller.onLiveRecord({
       v: 1,
       sessionId: "session-1",
+      seq: 1,
+      kind: "tool-start",
+      turn: 1,
+      step: 2,
+      callId: "duplicate-sequence",
+      name: "must_not_render",
+      arguments: "{}",
+    })
+    expect(harness.controller.state.transcript.filter((item) => item.kind === "tool-call")).toHaveLength(1)
+    harness.controller.onLiveRecord({
+      v: 1,
+      sessionId: "session-1",
       seq: 2,
       kind: "tool-end",
       turn: 1,
@@ -234,7 +274,8 @@ describe("AppController", () => {
     harness.logs.emit({ kind: "tool-result", callId: "call-1", name: "read_file", text: "contents", isError: false })
     harness.logs.emit({ kind: "usage", turn: 1, step: 1, usage: { inputTokens: 10, outputTokens: 4, cacheReadTokens: 2 } })
 
-    expect(harness.controller.state.transcript.filter((item) => item.kind === "tool-call")).toHaveLength(1)
+    const toolItems = harness.controller.state.transcript.filter((item) => item.kind === "tool-call" || item.kind === "tool-result")
+    expect(toolItems).toEqual([{ kind: "tool-result", name: "read_file", text: "contents", isError: false }])
     expect(harness.controller.state.transcript.filter((item) => item.kind === "tool-result")).toHaveLength(1)
     expect(harness.controller.state.usage).toEqual({ inputTokens: 10, outputTokens: 4, cacheReadTokens: 2 })
     harness.finishPrompt()
@@ -317,6 +358,21 @@ describe("AppController", () => {
     harness.finishPrompt()
     await prompt
     expect(harness.controller.state.phase).toBe("closing")
+  })
+
+  it("disposes clocks, live input, logs, overlays, and the backend in order", async () => {
+    const harness = createHarness()
+    await harness.controller.start()
+
+    await harness.controller.close()
+
+    expect(harness.cleanupOrder).toEqual([
+      "view-timers",
+      "backend-live",
+      "logs",
+      "view-overlays",
+      "backend",
+    ])
   })
 
   it("blocks submit and duplicate History while history storage is loading", async () => {

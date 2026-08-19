@@ -76,6 +76,12 @@ export class LiveRecordDecoder {
     this.buffer = ""
   }
 
+  discard(): void {
+    this.decoder.end()
+    this.buffer = ""
+    this.discardingOversizedLine = false
+  }
+
   private decodeLine(line: string): void {
     if (!line) return
     let value: unknown

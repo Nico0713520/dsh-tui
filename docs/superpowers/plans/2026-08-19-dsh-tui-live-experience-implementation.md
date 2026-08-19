@@ -500,6 +500,17 @@ Commit: `docs: complete the live experience implementation`
 
 ---
 
+## Post-Implementation Review Fixes
+
+- [x] Keep queued startup text synchronized with edits after startup failure.
+- [x] Reject stale live sequences before tool/usage side effects and update tool cards in place.
+- [x] Preserve Markdown list semantics across incremental block boundaries.
+- [x] Mark first paint from the renderer rather than from render scheduling.
+- [x] Preserve phase and model before usage/cost/session details on narrow terminals.
+- [x] Dispose clocks, live readers, JSONL, overlays, and the ACP child in the specified order.
+
+---
+
 ## Self-Review Record
 
 - Spec coverage: every objective, three-channel authority rule, security limit, queue behavior, incremental rendering requirement, animation rule, observability mark, degradation path, cleanup rule, and distribution restriction maps to Tasks 1–8.

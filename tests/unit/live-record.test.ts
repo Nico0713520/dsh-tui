@@ -101,4 +101,20 @@ describe("LiveRecordDecoder", () => {
     expect(diagnostics).toHaveLength(1)
     expect(records).toEqual([{ v: 1, sessionId: "s-1", seq: 8, kind: "turn-start", turn: 3 }])
   })
+
+  it("discards an unfinished shutdown record without decoding or diagnosing it", () => {
+    const records: DshLiveRecord[] = []
+    const diagnostics: string[] = []
+    const decoder = new LiveRecordDecoder({
+      sessionId: () => "s-1",
+      onRecord: (record) => records.push(record),
+      onDiagnostic: (message) => diagnostics.push(message),
+    })
+
+    decoder.push('{"v":1,"sessionId":"s-1"')
+    decoder.discard()
+
+    expect(records).toEqual([])
+    expect(diagnostics).toEqual([])
+  })
 })

@@ -7,6 +7,7 @@ export interface AssistantStreamSnapshot {
   activity: "idle" | "thinking" | "responding"
   committed: boolean
   interruption: "cancelled" | "outcome-unknown" | null
+  acceptedRecord: boolean
 }
 
 export interface AssistantStream {
@@ -18,11 +19,11 @@ export interface AssistantStream {
 }
 
 export function createAssistantStream(): AssistantStream {
-  let state: AssistantStreamSnapshot = emptySnapshot()
+  let state: Omit<AssistantStreamSnapshot, "acceptedRecord"> = emptySnapshot()
   let highestSeq = -1
   const blocks = new Map<string, { turn: number; step: number; index: number; text: string }>()
 
-  const snapshot = (): AssistantStreamSnapshot => Object.freeze({ ...state })
+  const snapshot = (acceptedRecord = false): AssistantStreamSnapshot => Object.freeze({ ...state, acceptedRecord })
 
   return {
     begin(sessionId) {
@@ -48,10 +49,10 @@ export function createAssistantStream(): AssistantStream {
         }
       }
       if (state.committed || state.interruption !== null) return snapshot()
-      if (record.kind === "turn-start") return snapshot()
+      if (record.kind === "turn-start") return snapshot(true)
       if (record.kind === "activity") {
         state = { ...state, activity: record.activity }
-        return snapshot()
+        return snapshot(true)
       }
       if (record.kind === "text-delta" || record.kind === "text-final") {
         const key = `${record.turn}:${record.step}:${record.index}`
@@ -72,7 +73,7 @@ export function createAssistantStream(): AssistantStream {
         }
       }
       if (record.kind === "turn-end") state = { ...state, activity: "idle" }
-      return snapshot()
+      return snapshot(true)
     },
     reconcileCommitted(text) {
       state = { ...state, text, activity: "idle", committed: true, interruption: null }
@@ -91,7 +92,7 @@ export function createAssistantStream(): AssistantStream {
   }
 }
 
-function emptySnapshot(): AssistantStreamSnapshot {
+function emptySnapshot(): Omit<AssistantStreamSnapshot, "acceptedRecord"> {
   return {
     sessionId: null,
     turn: null,

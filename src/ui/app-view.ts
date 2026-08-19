@@ -68,14 +68,24 @@ export function statusText(
   const cost = state.costUsd === null ? c.dim("—") : c.dim(`$${state.costUsd.toFixed(6)}`)
   const session = state.sessionId ? c.dim(` · ${singleLine(state.sessionId, 8)}`) : ""
   const extra = options.notice || state.backendMessage || state.interruption || ""
+  const width = Math.max(8, columns)
   const backend = options.mode === "echo" ? c.dim("echo") : c.blue(singleLine(options.model, 28))
+  const compactBackendWidth = Math.max(1, width - visibleWidth(` ${label} · `))
+  const compactBackend = options.mode === "echo"
+    ? c.dim(singleLine("echo", compactBackendWidth))
+    : c.blue(singleLine(options.model, compactBackendWidth))
   const elapsed = options.elapsedSeconds === undefined || (state.phase !== "working" && state.phase !== "cancelling")
     ? ""
     : c.dim(` · ${options.elapsedSeconds}s`)
-  const raw = extra
-    ? `${STATUS_PREFIX} dsh-tui · ${colorPhase(label)} · ${c.dim(singleLine(extra, Math.max(1, columns - 18)))}\x1b[0m`
+  const full = extra
+    ? `${STATUS_PREFIX} dsh-tui · ${backend} · ${colorPhase(label)} · ${c.dim(singleLine(extra, Math.max(1, columns - 18)))}\x1b[0m`
     : `${STATUS_PREFIX} dsh-tui · ${backend} · ${phase}${elapsed}${session} ${tokens} ${cost}\x1b[0m`
-  return truncateToWidth(raw, Math.max(8, columns), "…")
+  const compact = extra
+    ? `${STATUS_PREFIX} ${colorPhase(label)} · ${compactBackend} · ${c.dim(singleLine(extra, Math.max(1, columns)))}\x1b[0m`
+    : `${STATUS_PREFIX} ${colorPhase(label)} · ${compactBackend}\x1b[0m`
+  const phaseAndExtra = `${STATUS_PREFIX} ${colorPhase(label)}${extra ? ` · ${c.dim(singleLine(extra, Math.max(1, columns)))}` : ""}\x1b[0m`
+  const best = [full, compact, phaseAndExtra].find((candidate) => visibleWidth(candidate) <= width) ?? phaseAndExtra
+  return truncateToWidth(best, width, "…")
 }
 
 export function toolResultText(item: Extract<TranscriptItem, { kind: "tool-result" }>, columns: number): string {
@@ -85,10 +95,37 @@ export function toolResultText(item: Extract<TranscriptItem, { kind: "tool-resul
   return `${prefix}${item.isError ? c.red(text) : c.dim(text)}`
 }
 
+export class PaintAwareContainer extends Container {
+  private pending = false
+  private readonly onPaint: () => void
+
+  constructor(onPaint: () => void) {
+    super()
+    this.onPaint = onPaint
+  }
+
+  markPending(): void {
+    this.pending = true
+  }
+
+  clearPending(): void {
+    this.pending = false
+  }
+
+  render(width: number): string[] {
+    const lines = super.render(width)
+    if (this.pending) {
+      this.pending = false
+      this.onPaint()
+    }
+    return lines
+  }
+}
+
 export class AppView implements ControllerView {
   readonly terminal = new ProcessTerminal()
   readonly tui: TUI = new TuiMainScreen(this.terminal)
-  private readonly transcript = new Container()
+  private readonly transcript = new PaintAwareContainer(() => this.actions?.onLiveTextPaint())
   private readonly committedTranscript = new Container()
   private readonly partialAssistant = createStreamingMarkdownView({
     markdown: (text) => new Markdown(text, 1, 0, markdownTheme),
@@ -114,6 +151,7 @@ export class AppView implements ControllerView {
   private readonly renderGate: LatestRenderGate<AppState>
   private pulseTick: DeepPulseTick = { frame: 0, completion: false, settled: false }
   private elapsedSeconds = 0
+  private preparedToStop = false
 
   constructor(options: {
     mode: RunMode
@@ -164,6 +202,14 @@ export class AppView implements ControllerView {
   }
 
   stop(): void {
+    this.prepareShutdown()
+    this.dismissOverlays()
+    this.tui.stop()
+  }
+
+  prepareShutdown(): void {
+    if (this.preparedToStop) return
+    this.preparedToStop = true
     if (this.noticeTimer !== null) clearTimeout(this.noticeTimer)
     this.noticeTimer = null
     this.pulseClock.dispose()
@@ -171,7 +217,10 @@ export class AppView implements ControllerView {
     this.renderGate.dispose()
     this.removeInputListener?.()
     this.removeInputListener = null
-    this.tui.stop()
+  }
+
+  dismissOverlays(): void {
+    while (this.tui.hasOverlay()) this.tui.hideOverlay()
   }
 
   render(state: AppState): void {
@@ -215,8 +264,12 @@ export class AppView implements ControllerView {
     this.updateHeader()
     this.updateStatus()
     const committedLiveText = Boolean(previous?.partialAssistantText) && !state.partialAssistantText
+    if (!previous?.partialAssistantText && state.partialAssistantText) this.transcript.markPending()
+    else if (committedLiveText) {
+      const latest = state.transcript.at(-1)
+      if (latest?.kind !== "assistant") this.transcript.clearPending()
+    }
     this.tui.requestRender(committedLiveText)
-    if (!previous?.partialAssistantText && state.partialAssistantText) this.actions?.onLiveTextPaint()
   }
 
   async requestApproval(request: ApprovalRequest): Promise<PermissionDecision> {

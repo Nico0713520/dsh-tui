@@ -20,6 +20,8 @@ export function createStreamingMarkdownView(options: {
   let scanPosition = 0
   let fence: { marker: "`" | "~"; length: number } | null = null
   let displayMath = false
+  let tailHasList = false
+  let pendingListBoundary: number | null = null
   let tail = options.markdown("")
   element.addChild(tail)
 
@@ -29,6 +31,8 @@ export function createStreamingMarkdownView(options: {
     scanPosition = 0
     fence = null
     displayMath = false
+    tailHasList = false
+    pendingListBoundary = null
     element.clear()
     tail = options.markdown("")
     element.addChild(tail)
@@ -40,17 +44,30 @@ export function createStreamingMarkdownView(options: {
     while (newline >= 0) {
       const lineEnd = newline + 1
       const line = source.slice(scanPosition, newline)
+      if (!fence && !displayMath && line.trim() && pendingListBoundary !== null && !isListContinuation(line)) {
+        freezeTail(pendingListBoundary)
+      }
       updateScanner(line)
       scanPosition = lineEnd
-      if (!fence && !displayMath && line.trim() === "") {
-        tail.setText(source.slice(stableEnd, lineEnd))
-        stableEnd = lineEnd
-        tail = options.markdown("")
-        element.addChild(tail)
+      if (!fence && !displayMath) {
+        if (isListItem(line)) tailHasList = true
+        if (line.trim() === "") {
+          if (tailHasList) pendingListBoundary = lineEnd
+          else freezeTail(lineEnd)
+        }
       }
       newline = source.indexOf("\n", scanPosition)
     }
     tail.setText(source.slice(stableEnd))
+  }
+
+  const freezeTail = (end: number): void => {
+    tail.setText(source.slice(stableEnd, end))
+    stableEnd = end
+    tailHasList = false
+    pendingListBoundary = null
+    tail = options.markdown("")
+    element.addChild(tail)
   }
 
   const updateScanner = (line: string): void => {
@@ -75,4 +92,12 @@ export function createStreamingMarkdownView(options: {
     },
     reset,
   }
+}
+
+function isListItem(line: string): boolean {
+  return /^\s{0,3}(?:[-+*]|\d+[.)])\s+/.test(line)
+}
+
+function isListContinuation(line: string): boolean {
+  return isListItem(line) || /^\s+\S/.test(line)
 }

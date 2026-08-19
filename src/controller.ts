@@ -56,6 +56,8 @@ export interface ControllerView {
   render(state: AppState): void
   requestApproval(request: ApprovalRequest): Promise<PermissionDecision>
   chooseHistory(items: readonly SessionInfo[]): Promise<HistoryChoice>
+  prepareShutdown?(): void
+  dismissOverlays?(): void
 }
 
 export interface BackendPort {
@@ -63,6 +65,7 @@ export interface BackendPort {
   newSession(): Promise<string>
   prompt(text: string): Promise<{ stopReason: string }>
   cancel(): void
+  stopLiveEvents?(): void
   close(): Promise<void>
   get activeSessionId(): string | null
 }
@@ -85,7 +88,7 @@ export class AppController {
   private committedAssistantText = ""
   private readonly seenToolStarts = new Set<string>()
   private readonly seenToolEnds = new Set<string>()
-  private readonly liveTools = new Map<string, { name: string; arguments: string }>()
+  private readonly liveTools = new Map<string, { name: string; transcriptIndex: number }>()
   private readonly seenUsageSteps = new Set<string>()
   private readonly turnPerf = new TurnPerf()
   private perfReported = false
@@ -156,7 +159,7 @@ export class AppController {
   }
 
   updateDraft(text: string): void {
-    if (this.stateValue.phase !== "starting" || this.stateValue.queuedPrompt === null) return
+    if ((this.stateValue.phase !== "starting" && this.stateValue.phase !== "failed") || this.stateValue.queuedPrompt === null) return
     this.setState({ queuedPrompt: text })
   }
 
@@ -316,14 +319,16 @@ export class AppController {
 
   onLiveRecord(record: DshLiveRecord): void {
     if (this.stateValue.phase !== "working" && this.stateValue.phase !== "cancelling") return
-    this.turnPerf.mark("first-live-event")
     const snapshot = this.assistantStream.apply(record)
+    if (!snapshot.acceptedRecord) return
+    this.turnPerf.mark("first-live-event")
     if (snapshot.text) this.turnPerf.mark("first-live-text")
     if (record.kind === "tool-start") {
       this.turnPerf.mark("first-visible-activity")
-      this.liveTools.set(record.callId, { name: record.name, arguments: record.arguments })
-      if (!this.seenToolStarts.has(record.callId)) {
+      if (!this.seenToolStarts.has(record.callId) && !this.seenToolEnds.has(record.callId)) {
         this.seenToolStarts.add(record.callId)
+        const transcriptIndex = this.stateValue.transcript.length
+        this.liveTools.set(record.callId, { name: record.name, transcriptIndex })
         this.setState({
           partialAssistantText: snapshot.text,
           activity: { kind: "tool", name: record.name },
@@ -339,15 +344,20 @@ export class AppController {
       const tool = this.liveTools.get(record.callId)
       if (!this.seenToolEnds.has(record.callId)) {
         this.seenToolEnds.add(record.callId)
+        this.seenToolStarts.add(record.callId)
+        const item: TranscriptItem = {
+          kind: "tool-result",
+          name: tool?.name ?? "tool",
+          text: record.text,
+          isError: record.isError,
+        }
+        const transcript = [...this.stateValue.transcript]
+        if (tool && transcript[tool.transcriptIndex]?.kind === "tool-call") transcript[tool.transcriptIndex] = item
+        else transcript.push(item)
         this.setState({
           partialAssistantText: snapshot.text,
           activity: { kind: "thinking" },
-          transcript: [...this.stateValue.transcript, {
-            kind: "tool-result",
-            name: tool?.name ?? "tool",
-            text: record.text,
-            isError: record.isError,
-          }],
+          transcript,
         })
       } else {
         this.setState({ partialAssistantText: snapshot.text, activity: { kind: "thinking" } })
@@ -405,19 +415,32 @@ export class AppController {
   async close(): Promise<void> {
     if (this.stateValue.phase === "closing") return
     this.setState({ phase: "closing", activeOverlay: null, activity: { kind: "idle" } })
+    this.view.prepareShutdown?.()
+    this.backend.stopLiveEvents?.()
     this.logs.stop()
+    this.view.dismissOverlays?.()
     await this.backend.close()
   }
 
   private onSessionLogEvent(event: SessionLogEvent): void {
     if (event.kind === "tool-call") {
-      if (this.seenToolStarts.has(event.callId)) return
+      if (this.seenToolStarts.has(event.callId) || this.seenToolEnds.has(event.callId)) return
       this.seenToolStarts.add(event.callId)
+      this.liveTools.set(event.callId, {
+        name: event.name,
+        transcriptIndex: this.stateValue.transcript.length,
+      })
       this.setState({ transcript: [...this.stateValue.transcript, { kind: "tool-call", name: event.name, arguments: event.arguments }] })
     } else if (event.kind === "tool-result") {
       if (this.seenToolEnds.has(event.callId)) return
       this.seenToolEnds.add(event.callId)
-      this.setState({ transcript: [...this.stateValue.transcript, { kind: "tool-result", name: event.name, text: event.text, isError: event.isError }] })
+      this.seenToolStarts.add(event.callId)
+      const item: TranscriptItem = { kind: "tool-result", name: event.name, text: event.text, isError: event.isError }
+      const tool = this.liveTools.get(event.callId)
+      const transcript = [...this.stateValue.transcript]
+      if (tool && transcript[tool.transcriptIndex]?.kind === "tool-call") transcript[tool.transcriptIndex] = item
+      else transcript.push(item)
+      this.setState({ transcript })
     } else {
       const key = event.turn === undefined || event.step === undefined ? undefined : `${event.turn}:${event.step}`
       this.applyUsage(event.usage, key)

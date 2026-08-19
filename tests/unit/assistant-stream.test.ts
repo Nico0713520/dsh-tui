@@ -28,10 +28,10 @@ describe("AssistantStream", () => {
     expect(stream.apply({ v: 1, sessionId: "s-1", seq: 2, kind: "activity", turn: 1, step: 1, activity: "thinking" }).activity).toBe("thinking")
     stream.apply({ v: 1, sessionId: "s-1", seq: 3, kind: "text-delta", turn: 1, step: 1, index: 1, text: "B" })
     expect(stream.apply({ v: 1, sessionId: "s-1", seq: 4, kind: "text-delta", turn: 1, step: 1, index: 0, text: "A" }).text).toBe("AB")
-    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 4, kind: "text-delta", turn: 1, step: 1, index: 0, text: "duplicate" }).text).toBe("AB")
+    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 4, kind: "text-delta", turn: 1, step: 1, index: 0, text: "duplicate" })).toMatchObject({ text: "AB", acceptedRecord: false })
 
-    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 5, kind: "turn-start", turn: 2 })).toMatchObject({ turn: 2, text: "", activity: "idle" })
-    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 6, kind: "text-delta", turn: 1, step: 2, index: 0, text: "stale" }).text).toBe("")
+    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 5, kind: "turn-start", turn: 2 })).toMatchObject({ turn: 2, text: "", activity: "idle", acceptedRecord: true })
+    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 6, kind: "text-delta", turn: 1, step: 2, index: 0, text: "stale" })).toMatchObject({ text: "", acceptedRecord: false })
   })
 
   it("keeps committed output authoritative until a newer turn", () => {
@@ -54,7 +54,7 @@ describe("AssistantStream", () => {
     stream.apply({ v: 1, sessionId: "s-1", seq: 2, kind: "text-delta", turn: 1, step: 1, index: 0, text: "partial" })
 
     expect(stream.interrupt("outcome-unknown")).toMatchObject({ text: "partial", activity: "idle", interruption: "outcome-unknown" })
-    expect(stream.reset()).toEqual({ sessionId: null, turn: null, text: "", activity: "idle", committed: false, interruption: null })
+    expect(stream.reset()).toEqual({ sessionId: null, turn: null, text: "", activity: "idle", committed: false, interruption: null, acceptedRecord: false })
     expect(stream.apply({ v: 1, sessionId: "s-1", seq: 3, kind: "text-delta", turn: 1, step: 1, index: 0, text: "late" }).text).toBe("")
   })
 })
