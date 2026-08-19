@@ -4,6 +4,7 @@ import { SessionLogReader } from "./backend/session-log.ts"
 import { AppController, type BackendPort } from "./controller.ts"
 import type { AppConfig } from "./config.ts"
 import { AppView } from "./ui/app-view.ts"
+import { safeErrorText } from "./text.ts"
 
 class EchoBackend implements BackendPort {
   private sessionNumber = 0
@@ -102,14 +103,21 @@ export async function runApp(config: AppConfig): Promise<number> {
   const finish = async (code: number): Promise<void> => {
     if (settled) return
     settled = true
-    await controller.close()
-    view.stop()
-    removeHandlers()
-    resolveExit(code)
+    let finalCode = code
+    try {
+      await controller.close()
+    } catch (error) {
+      finalCode = 1
+      controller.onDiagnostic(`cleanup failed: ${safeErrorText(error)}`)
+    } finally {
+      view.stop()
+      removeHandlers()
+      resolveExit(finalCode)
+    }
   }
   const onSignal = () => { void finish(0) }
   const onFatal = (reason: unknown) => {
-    controller.onDiagnostic(`fatal: ${reason instanceof Error ? reason.message : String(reason)}`)
+    controller.onDiagnostic(`fatal: ${safeErrorText(reason)}`)
     void finish(1)
   }
 

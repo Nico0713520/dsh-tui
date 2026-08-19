@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { sanitizeTerminalText, singleLine } from "../../src/text.ts"
+import { safeErrorText, sanitizeTerminalText, singleLine } from "../../src/text.ts"
 
 describe("terminal text", () => {
   it("removes CSI, OSC hyperlinks, carriage returns, and NUL", () => {
@@ -14,5 +14,9 @@ describe("terminal text", () => {
   it("normalizes newlines and truncates by terminal width", () => {
     expect(singleLine("中文\n路径", 20)).toBe("中文 路径")
     expect(singleLine("中文路径", 5)).toBe("中文…")
+  })
+
+  it("sanitizes exception text for terminal output", () => {
+    expect(safeErrorText(new Error("bad\u001b]8;;https://evil.example\u0007link"), 80)).toBe("badlink")
   })
 })

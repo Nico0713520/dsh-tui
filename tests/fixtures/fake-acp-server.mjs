@@ -6,6 +6,8 @@ let nextSession = 1
 let promptId = null
 let permissionId = 100
 
+if (scenario === "stubborn") process.on("SIGTERM", () => {})
+
 function send(message) {
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`)
 }
@@ -81,4 +83,6 @@ input.on("line", (line) => {
   result(frame.id, { stopReason: "end_turn" })
 })
 
-process.stdin.on("end", () => process.exit(0))
+process.stdin.on("end", () => {
+  if (scenario !== "stubborn") process.exit(0)
+})

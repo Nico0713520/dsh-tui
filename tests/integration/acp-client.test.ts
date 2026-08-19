@@ -1,4 +1,6 @@
 import { fileURLToPath } from "node:url"
+import { join } from "node:path"
+import { tmpdir } from "node:os"
 import { describe, expect, it } from "vitest"
 import { AcpClient, type AcpClientEvents, type PermissionDecision } from "../../src/backend/acp-client.ts"
 
@@ -109,5 +111,25 @@ describe("AcpClient", () => {
     await waitFor(() => acp.activeSessionId !== null)
     await expect(acp.close()).resolves.toBeUndefined()
     await expect(settled).resolves.toMatchObject({ ok: false })
+  })
+
+  it("rejects immediately when the backend executable cannot spawn", async () => {
+    const missing = join(tmpdir(), `missing-dsh-${process.pid}`)
+    const acp = new AcpClient({
+      command: [missing],
+      cwd: process.cwd(),
+      events: createEvents(),
+      timeouts: { initialize: 10_000 },
+    })
+    const started = Date.now()
+    await expect(acp.newSession()).rejects.toThrow(/start|spawn|ENOENT/i)
+    expect(Date.now() - started).toBeLessThan(1_500)
+    await expect(acp.close()).resolves.toBeUndefined()
+  })
+
+  it("escalates a stubborn backend and remains idempotent", async () => {
+    const acp = client("stubborn", createEvents())
+    await acp.newSession()
+    await expect(Promise.all([acp.close(), acp.close()])).resolves.toEqual([undefined, undefined])
   })
 })

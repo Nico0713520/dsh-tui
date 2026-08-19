@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { createInterface, type Interface } from "node:readline"
-import { singleLine } from "../text.ts"
+import { safeErrorText } from "../text.ts"
 
 export type PermissionDecision =
   | { outcome: "selected"; optionId: string }
@@ -42,11 +42,6 @@ interface RecordValue {
 
 function isRecord(value: unknown): value is RecordValue {
   return typeof value === "object" && value !== null
-}
-
-function errorText(value: unknown): string {
-  if (value instanceof Error) return singleLine(value.message, 220)
-  return singleLine(String(value), 220)
 }
 
 export class AcpClient {
@@ -148,7 +143,7 @@ export class AcpClient {
         params: { sessionId: this.sessionId, reason: "user interrupted" },
       })
     } catch (error) {
-      this.events.onDiagnostic(`cancel failed: ${errorText(error)}`)
+      this.events.onDiagnostic(`cancel failed: ${safeErrorText(error)}`)
     }
   }
 
@@ -177,17 +172,25 @@ export class AcpClient {
     this.output = createInterface({ input: child.stdout })
     this.output.on("line", (line) => this.handleLine(line))
     child.stderr.on("data", (chunk: Buffer | string) => {
-      const diagnostic = singleLine(String(chunk), 220)
+      const diagnostic = safeErrorText(String(chunk), 220)
       if (diagnostic) this.events.onDiagnostic(`backend: ${diagnostic}`)
     })
     child.once("error", (error) => {
-      this.events.onDiagnostic(`backend start/error: ${errorText(error)}`)
+      this.events.onDiagnostic(`backend start/error: ${safeErrorText(error)}`)
+      this.finalizeProcess(child, new Error(`ACP backend failed to start: ${safeErrorText(error)}`), null, null)
     })
-    child.once("exit", (code, signal) => this.handleExit(child, code, signal))
+    child.once("exit", (code, signal) => {
+      this.finalizeProcess(child, new Error(`ACP backend exited (${code ?? signal ?? "unknown"}); outcome unknown`), code, signal)
+    })
     return child
   }
 
-  private handleExit(child: ChildProcessWithoutNullStreams, code: number | null, signal: NodeJS.Signals | null): void {
+  private finalizeProcess(
+    child: ChildProcessWithoutNullStreams,
+    error: Error,
+    code: number | null,
+    signal: NodeJS.Signals | null,
+  ): void {
     if (this.process !== child) return
     this.process = null
     this.output?.close()
@@ -196,7 +199,7 @@ export class AcpClient {
     this.sessionId = null
     this.promptInFlight = false
     const outcomeUnknown = this.pending.size > 0
-    this.rejectPending(new Error(`ACP backend exited (${code ?? signal ?? "unknown"}); outcome unknown`))
+    this.rejectPending(error)
     if (!this.closing && !this.closed && !this.exitReported) {
       this.exitReported = true
       this.events.onBackendExit({ code, signal, outcomeUnknown })
@@ -221,7 +224,7 @@ export class AcpClient {
       clearTimeout(pending.timer)
       const error = message.error
       if (isRecord(error)) {
-        pending.reject(new Error(`ACP ${pending.method}: ${errorText(error.message ?? error)}`))
+        pending.reject(new Error(`ACP ${pending.method}: ${safeErrorText(error.message ?? error)}`))
       } else {
         pending.resolve(message.result)
       }
@@ -265,11 +268,15 @@ export class AcpClient {
       const valid = decision.outcome === "selected" && optionIds.includes(decision.optionId)
         ? decision
         : { outcome: "cancelled" as const }
-      this.writeFrame({
-        jsonrpc: "2.0",
-        id: message.id,
-        result: { outcome: valid.outcome === "selected" ? valid : { outcome: "cancelled" } },
-      })
+      try {
+        this.writeFrame({
+          jsonrpc: "2.0",
+          id: message.id,
+          result: { outcome: valid.outcome === "selected" ? valid : { outcome: "cancelled" } },
+        })
+      } catch (error) {
+        this.events.onDiagnostic(`permission response failed: ${safeErrorText(error)}`)
+      }
     }
     void Promise.resolve()
       .then(() => this.events.onPermission({ toolCallId, optionIds }))
@@ -292,7 +299,7 @@ export class AcpClient {
       } catch (error) {
         clearTimeout(timer)
         this.pending.delete(id)
-        reject(new Error(`ACP ${method} write failed: ${errorText(error)}`))
+        reject(new Error(`ACP ${method} write failed: ${safeErrorText(error)}`))
       }
     })
   }
@@ -315,12 +322,22 @@ export class AcpClient {
     const child = this.process
     this.rejectPending(new Error("ACP client closed before the request settled"))
     if (!child) return
-    try { child.stdin.end() } catch {}
+    this.tryLifecycleAction("ACP stdin close failed", () => child.stdin.end())
     if (await this.waitForExit(child, 1_000)) return
-    try { child.kill() } catch {}
+    this.tryLifecycleAction("ACP graceful termination failed", () => { child.kill() })
     if (await this.waitForExit(child, 1_500)) return
-    try { child.kill("SIGKILL") } catch {}
-    await this.waitForExit(child, 1_000)
+    this.tryLifecycleAction("ACP force termination failed", () => { child.kill("SIGKILL") })
+    if (!(await this.waitForExit(child, 1_000))) {
+      throw new Error("ACP backend did not exit after forced shutdown")
+    }
+  }
+
+  private tryLifecycleAction(label: string, action: () => void): void {
+    try {
+      action()
+    } catch (error) {
+      this.events.onDiagnostic(`${label}: ${safeErrorText(error)}`)
+    }
   }
 
   private waitForExit(child: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<boolean> {

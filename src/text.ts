@@ -18,3 +18,9 @@ export function singleLine(value: string, maxWidth: number): string {
   const normalized = sanitizeTerminalText(value).replace(/[\r\n\t]+/g, " ").replace(/ +/g, " ").trim()
   return stripTerminalSequences(truncateToWidth(normalized, maxWidth, "…"))
 }
+
+/** Convert any thrown value into safe, bounded terminal text. */
+export function safeErrorText(value: unknown, maxWidth = 220): string {
+  const message = value instanceof Error ? value.message : String(value)
+  return singleLine(message, maxWidth)
+}
