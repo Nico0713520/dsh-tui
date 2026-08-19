@@ -37,18 +37,22 @@ input.on("line", (line) => {
   }
 
   if (frame.method === "session/new") {
-    result(frame.id, { sessionId: `fake-session-${nextSession++}` })
+    result(frame.id, { sessionId: `fake-${String(nextSession++).padStart(3, "0")}` })
     return
   }
 
   if (frame.id === permissionId && frame.result) {
-    if (frame.result.outcome?.outcome === "selected") assistant("allowed")
+    if (frame.result.outcome?.outcome === "selected" && frame.result.outcome?.optionId === "allow-once") assistant("allowed")
     else assistant("cancelled")
     if (promptId !== null) result(promptId, { stopReason: frame.result.outcome?.outcome === "selected" ? "end_turn" : "cancelled" })
     return
   }
 
   if (frame.method === "session/cancel") {
+    if (scenario === "permission") {
+      assistant("unexpected-session-cancel")
+      return
+    }
     if (scenario === "delayed" && promptId !== null) {
       assistant("cancelled")
       result(promptId, { stopReason: "cancelled" })

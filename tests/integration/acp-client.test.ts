@@ -51,7 +51,7 @@ describe("AcpClient", () => {
     const sessionId = await acp.newSession()
     const result = await acp.prompt("hello")
 
-    expect(sessionId).toBe("fake-session-1")
+    expect(sessionId).toBe("fake-001")
     expect(result.stopReason).toBe("end_turn")
     expect(events.chunks).toEqual(["hello"])
     expect(acp.activeSessionId).toBe(sessionId)

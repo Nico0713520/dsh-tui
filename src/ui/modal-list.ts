@@ -25,8 +25,8 @@ export class ModalList implements Component {
   ) {
     this.onResult = onResult
     this.body = new Container()
-    this.body.addChild(new Text(c.bold(c.cyan(header))))
-    this.body.addChild(new Text(c.dim("↑↓ select · Enter choose · Esc cancel")))
+    this.body.addChild(new Text(c.bold(c.cyan(header)), 1, 0))
+    this.body.addChild(new Text(c.dim("↑↓ select · Enter choose · Esc cancel"), 1, 0))
     this.list = new SelectList([...items], maxVisible, selectTheme)
     this.list.onSelect = (item) => this.finish(item.value)
     this.list.onCancel = () => this.finish(null)

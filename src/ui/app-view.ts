@@ -50,7 +50,9 @@ export function statusText(
   const session = state.sessionId ? c.dim(` · ${singleLine(state.sessionId, 8)}`) : ""
   const extra = options.notice || state.backendMessage || ""
   const backend = options.mode === "echo" ? c.dim("echo") : c.blue(singleLine(options.model, 28))
-  const raw = `${STATUS_PREFIX} dsh-tui · ${backend} · ${phase}${session} ${tokens} ${cost}${extra ? ` ${c.dim(singleLine(extra, 50))}` : ""}\x1b[0m`
+  const raw = extra
+    ? `${STATUS_PREFIX} dsh-tui · ${phase} · ${c.dim(singleLine(extra, Math.max(1, columns - 16)))}\x1b[0m`
+    : `${STATUS_PREFIX} dsh-tui · ${backend} · ${phase}${session} ${tokens} ${cost}\x1b[0m`
   return truncateToWidth(raw, Math.max(8, columns), "…")
 }
 

@@ -28,6 +28,12 @@ describe("TUI presentation", () => {
     expect(visibleWidth(text)).toBeLessThanOrEqual(48)
   })
 
+  it("keeps a transient notice visible in a narrow status bar", () => {
+    const text = statusText(state, { mode: "echo", model: "deepseek-v4-flash", notice: "Ctrl+C again to exit" }, 48)
+    expect(text).toContain("Ctrl+C again to exit")
+    expect(visibleWidth(text)).toBeLessThanOrEqual(48)
+  })
+
   it("truncates tool results to the visible terminal width", () => {
     const text = toolResultText({ kind: "tool-result", name: "tool", text: "结果 ".repeat(100), isError: false }, 48)
     expect(visibleWidth(text)).toBeLessThanOrEqual(48)
