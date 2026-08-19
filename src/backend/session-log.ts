@@ -16,11 +16,10 @@ export interface SessionInfo {
   firstUserMessage: string
 }
 
-export interface HistoryEntry {
-  kind: "user" | "assistant" | "tool" | "diagnostic"
-  text: string
-  isError?: boolean
-}
+export type HistoryEntry =
+  | { kind: "user" | "assistant" | "diagnostic"; text: string }
+  | { kind: "tool-call"; name: string; arguments: string }
+  | { kind: "tool-result"; name: string; text: string; isError: boolean }
 
 export interface SessionLogWatchOptions {
   persistRoot: string
@@ -125,6 +124,7 @@ export class SessionLogReader {
   private decoder = new StringDecoder("utf8")
   private partialLine = ""
   private callNames = new Map<string, { name: string; arguments: string }>()
+  private lastMetadataStamp: string | null = null
   private options: SessionLogWatchOptions | null = null
 
   constructor(options: { pollIntervalMs?: number; readChunkSize?: number } = {}) {
@@ -165,6 +165,7 @@ export class SessionLogReader {
     this.decoder = new StringDecoder("utf8")
     this.partialLine = ""
     this.callNames.clear()
+    this.lastMetadataStamp = null
   }
 
   private async tick(generation: number): Promise<void> {
@@ -192,15 +193,24 @@ export class SessionLogReader {
       }
     }
     if (generation !== this.generation || !this.fileHandle) return
-    const metadata = await this.fileHandle.stat()
-    if (metadata.size < this.offset) {
+    let metadata = await this.fileHandle.stat()
+    const pathMetadata = await stat(filePath)
+    const handleIdentity = `${metadata.dev}:${metadata.ino}`
+    const pathIdentity = `${pathMetadata.dev}:${pathMetadata.ino}`
+    const metadataStamp = `${metadata.mtimeMs}:${metadata.ctimeMs}`
+    const replaced = handleIdentity !== pathIdentity
+      || metadata.size < this.offset
+      || (metadata.size === this.offset && this.lastMetadataStamp !== null && metadataStamp !== this.lastMetadataStamp)
+    if (replaced) {
       await this.fileHandle.close()
       this.fileHandle = await open(filePath, "r")
       this.offset = 0
       this.decoder = new StringDecoder("utf8")
       this.partialLine = ""
       this.callNames.clear()
+      metadata = await this.fileHandle.stat()
     }
+    this.lastMetadataStamp = `${metadata.mtimeMs}:${metadata.ctimeMs}`
     const buffer = Buffer.allocUnsafe(this.readChunkSize)
     const { bytesRead } = await this.fileHandle.read(buffer, 0, buffer.length, this.offset)
     if (bytesRead === 0 || generation !== this.generation) return
@@ -300,20 +310,6 @@ function isToolMessage(value: unknown): boolean {
   return value.data.message.content.some(isToolResultBlock)
 }
 
-function toolDetail(value: unknown): string {
-  if (!isRecord(value)) return ""
-  const args = typeof value.arguments === "string" ? value.arguments : stringArgument(value.arguments)
-  try {
-    const parsed: unknown = JSON.parse(args)
-    if (isRecord(parsed)) {
-      for (const key of ["command", "path", "pattern", "query", "description"]) {
-        if (typeof parsed[key] === "string") return parsed[key]
-      }
-    }
-  } catch {}
-  return args
-}
-
 export async function listHistory(persistRoot: string, cwd: string): Promise<SessionInfo[]> {
   const root = join(persistRoot, projectKey(cwd))
   let entries
@@ -350,6 +346,7 @@ export async function listHistory(persistRoot: string, cwd: string): Promise<Ses
 export async function loadHistory(persistRoot: string, cwd: string, sessionId: string): Promise<HistoryEntry[]> {
   const { records, malformed } = await readRecords(resolveSessionLogPath(persistRoot, cwd, sessionId))
   const entries: HistoryEntry[] = []
+  const callNames = new Map<string, { name: string; arguments: string }>()
   for (const record of records) {
     if (record.type === "user/message" && !isToolMessage(record)) {
       const text = firstText(record)
@@ -357,10 +354,13 @@ export async function loadHistory(persistRoot: string, cwd: string, sessionId: s
     } else if (record.type === "assistant/message") {
       const text = firstText(record)
       if (text.trim()) entries.push({ kind: "assistant", text })
-    } else if (record.type === "tool/call") {
-      const data = isRecord(record.data) ? record.data : {}
-      const name = typeof data.name === "string" ? data.name : "tool"
-      entries.push({ kind: "tool", text: `${name} ${toolDetail(data)}`.trim() })
+    } else {
+      const event = parseEvent(record, callNames)
+      if (event?.kind === "tool-call") {
+        entries.push({ kind: "tool-call", name: event.name, arguments: event.arguments })
+      } else if (event?.kind === "tool-result") {
+        entries.push({ kind: "tool-result", name: event.name, text: event.text, isError: event.isError })
+      }
     }
   }
   if (malformed > 0) entries.push({ kind: "diagnostic", text: `History contains ${malformed} malformed record(s).` })

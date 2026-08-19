@@ -14,6 +14,7 @@ describe("read-only history", () => {
         JSON.stringify({ type: "session/title", data: { title: "Demo" } }),
         JSON.stringify({ type: "user/message", data: { message: { content: [{ type: "text", text: "你好" }] } } }),
         JSON.stringify({ type: "tool/call", data: { callId: "c1", name: "read_file", arguments: "{\"path\":\"README.md\"}" } }),
+        JSON.stringify({ type: "tool/result", data: { message: { source: { callId: "c1" }, content: [{ type: "tool-result", isError: true, content: [{ type: "text", text: "失败" }] }] } } }),
         JSON.stringify({ type: "assistant/message", data: { message: { content: [{ type: "text", text: "完成" }] } } }),
       ].join("\n") + "\n")
       const listed = await listHistory(root, "/workspace/demo")
@@ -21,7 +22,8 @@ describe("read-only history", () => {
       expect(listed[0]?.title).toBe("Demo")
       expect(loaded).toEqual([
         { kind: "user", text: "你好" },
-        { kind: "tool", text: "read_file README.md" },
+        { kind: "tool-call", name: "read_file", arguments: "{\"path\":\"README.md\"}" },
+        { kind: "tool-result", name: "read_file", text: "失败", isError: true },
         { kind: "assistant", text: "完成" },
       ])
     } finally {

@@ -300,5 +300,11 @@ function historyToTranscript(entry: HistoryEntry): TranscriptItem {
   if (entry.kind === "user" || entry.kind === "assistant" || entry.kind === "diagnostic") {
     return { kind: entry.kind, text: entry.text }
   }
-  return { kind: "tool-result", name: "history", text: entry.text, isError: entry.isError === true }
+  if (entry.kind === "tool-call") {
+    return { kind: "tool-call", name: entry.name, arguments: entry.arguments }
+  }
+  if (entry.kind === "tool-result") {
+    return { kind: "tool-result", name: entry.name, text: entry.text, isError: entry.isError }
+  }
+  return { kind: "diagnostic", text: entry.text }
 }

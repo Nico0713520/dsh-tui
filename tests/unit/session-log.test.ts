@@ -89,4 +89,28 @@ describe("SessionLogReader", () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+
+  it("reopens a same-size overwritten log instead of losing the new event", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dsh-log-"))
+    try {
+      const dir = join(root, projectKey("/workspace/demo"), "same-size")
+      await mkdir(dir, { recursive: true })
+      const file = join(dir, "session.jsonl")
+      const reader = new SessionLogReader({ pollIntervalMs: 5 })
+      const events: SessionLogEvent[] = []
+      reader.watch({ persistRoot: root, cwd: "/workspace/demo", sessionId: "same-size", onEvent: (event) => events.push(event) })
+      const first = JSON.stringify({ type: "tool/call", data: { callId: "a", name: "read", arguments: "{}" } }) + "\n"
+      const second = JSON.stringify({ type: "tool/call", data: { callId: "b", name: "read", arguments: "{}" } }) + "\n"
+      expect(second.length).toBe(first.length)
+      await writeFile(file, first)
+      await waitFor(() => events.length === 1)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      await writeFile(file, second)
+      await waitFor(() => events.length === 2)
+      expect(events.map((event) => event.kind === "tool-call" ? event.callId : "")).toEqual(["a", "b"])
+      reader.stop()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })
