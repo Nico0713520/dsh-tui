@@ -12,6 +12,9 @@ const state: AppState = {
   backendMessage: null,
   transcript: [],
   partialAssistantText: "",
+  queuedPrompt: null,
+  activity: { kind: "idle" },
+  interruption: null,
 }
 
 describe("TUI presentation", () => {

@@ -22,6 +22,7 @@ import { showModalList } from "./modal-list.ts"
 
 export interface ViewActions {
   onSubmit(text: string): void
+  onDraft(text: string): void
   onCancel(): void
   onHistory(): void
   onClose(): void
@@ -80,6 +81,7 @@ export class AppView implements ControllerView {
   private noticeTimer: ReturnType<typeof setTimeout> | null = null
   private currentState: AppState | null = null
   private renderedTranscript: readonly TranscriptItem[] = []
+  private lastQueuedPrompt: string | null = null
   private readonly mode: RunMode
   private readonly model: string
 
@@ -102,6 +104,7 @@ export class AppView implements ControllerView {
   bind(actions: ViewActions): void {
     this.actions = actions
     this.editor.onSubmit = (text) => actions.onSubmit(text)
+    this.editor.onChange = (text) => actions.onDraft(text)
     this.removeInputListener = this.tui.addInputListener((data) => this.handleGlobalInput(data))
   }
 
@@ -120,6 +123,17 @@ export class AppView implements ControllerView {
 
   render(state: AppState): void {
     this.currentState = state
+    if (state.queuedPrompt !== null) {
+      if (this.editor.getText() !== state.queuedPrompt) this.editor.setText(state.queuedPrompt)
+      this.lastQueuedPrompt = state.queuedPrompt
+    } else if (this.lastQueuedPrompt !== null) {
+      if (this.editor.getText() === this.lastQueuedPrompt) this.editor.setText("")
+      this.lastQueuedPrompt = null
+    }
+    this.editor.disableSubmit = state.queuedPrompt !== null
+      || state.phase === "working"
+      || state.phase === "cancelling"
+      || state.activeOverlay !== null
     const extendsRendered = state.transcript.length >= this.renderedTranscript.length
       && this.renderedTranscript.every((item, index) => item === state.transcript[index])
     if (!extendsRendered) {

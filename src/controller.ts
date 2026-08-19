@@ -1,10 +1,17 @@
 import { classifyStakes, type ApprovalStakes } from "./policy.ts"
-import { estimateCostUsd, type Usage } from "./usage.ts"
+import { addUsage, estimateCostUsd, type Usage } from "./usage.ts"
 import type { AppConfig } from "./config.ts"
 import type { PermissionDecision } from "./backend/acp-client.ts"
 import type { HistoryEntry, SessionInfo, SessionLogEvent, SessionLogWatchOptions } from "./backend/session-log.ts"
+import { createAssistantStream } from "./backend/assistant-stream.ts"
+import type { DshLiveRecord } from "./backend/live-record.ts"
 
 export type AppPhase = "starting" | "ready" | "working" | "cancelling" | "failed" | "closing"
+
+export type AppActivity =
+  | { kind: "boot"; stage: "backend" | "session" }
+  | { kind: "idle" | "thinking" | "responding" }
+  | { kind: "tool" | "approval"; name: string }
 
 export type TranscriptItem =
   | { kind: "user" | "assistant" | "diagnostic"; text: string }
@@ -21,6 +28,9 @@ export interface AppState {
   backendMessage: string | null
   transcript: readonly TranscriptItem[]
   partialAssistantText: string
+  queuedPrompt: string | null
+  activity: AppActivity
+  interruption: "cancelled" | "outcome-unknown" | null
 }
 
 export interface ApprovalRequest {
@@ -69,7 +79,13 @@ export class AppController {
   private readonly backend: BackendPort
   private readonly logs: SessionLogPort
   private readonly view: ControllerView
+  private readonly assistantStream = createAssistantStream()
   private permissionTail: Promise<void> = Promise.resolve()
+  private committedAssistantText = ""
+  private readonly seenToolStarts = new Set<string>()
+  private readonly seenToolEnds = new Set<string>()
+  private readonly liveTools = new Map<string, { name: string; arguments: string }>()
+  private readonly seenUsageSteps = new Set<string>()
   private stateValue: AppState = {
     phase: "starting",
     sessionId: null,
@@ -79,6 +95,9 @@ export class AppController {
     backendMessage: null,
     transcript: [],
     partialAssistantText: "",
+    queuedPrompt: null,
+    activity: { kind: "boot", stage: "backend" },
+    interruption: null,
   }
 
   constructor(options: {
@@ -98,11 +117,16 @@ export class AppController {
   }
 
   async start(): Promise<void> {
-    this.setState({ phase: "starting", backendMessage: null })
+    this.setState({ phase: "starting", backendMessage: null, activity: { kind: "boot", stage: "backend" } })
     try {
       await this.backend.start()
+      this.setState({ activity: { kind: "boot", stage: "session" } })
       await this.backend.newSession()
-      this.setState({ phase: "ready", sessionId: this.backend.activeSessionId, backendMessage: null })
+      const sessionId = this.backend.activeSessionId
+      if (sessionId) this.assistantStream.begin(sessionId)
+      this.resetLiveMetadata()
+      this.setState({ phase: "ready", sessionId, backendMessage: null, activity: { kind: "idle" } })
+      await this.drainQueuedPrompt()
     } catch (error) {
       this.fail(error)
     }
@@ -115,25 +139,50 @@ export class AppController {
       this.addDiagnostic("Close the current overlay before submitting.")
       return
     }
+    if (this.stateValue.phase === "starting") {
+      this.setState({ queuedPrompt: value })
+      return
+    }
     if (this.stateValue.phase !== "ready") {
       this.addDiagnostic(this.stateValue.phase === "working" || this.stateValue.phase === "cancelling"
         ? "Already working; wait for the current prompt to settle."
         : "The backend is not ready; start a new session before submitting.")
       return
     }
+    await this.runPrompt(value)
+  }
+
+  updateDraft(text: string): void {
+    if (this.stateValue.phase !== "starting" || this.stateValue.queuedPrompt === null) return
+    this.setState({ queuedPrompt: text })
+  }
+
+  private async runPrompt(value: string): Promise<void> {
+    this.committedAssistantText = ""
     this.setState({
       phase: "working",
       backendMessage: null,
       partialAssistantText: "",
+      queuedPrompt: null,
+      activity: { kind: "thinking" },
+      interruption: null,
       transcript: [...this.stateValue.transcript, { kind: "user", text: value }],
     })
     try {
       const result = await this.backend.prompt(value)
-      if (this.isClosing()) return
+      if (this.isClosing() || this.stateValue.phase === "failed") return
+      if (result.stopReason === "cancelled") {
+        const snapshot = this.assistantStream.interrupt("cancelled")
+        this.setState({ partialAssistantText: snapshot.text, interruption: "cancelled" })
+      }
       this.finishAssistant(result.stopReason)
-      this.setState({ phase: "ready", backendMessage: result.stopReason === "cancelled" ? "interrupted" : null })
+      this.setState({
+        phase: "ready",
+        activity: { kind: "idle" },
+        backendMessage: result.stopReason === "cancelled" ? "interrupted" : null,
+      })
     } catch (error) {
-      if (this.isClosing()) return
+      if (this.isClosing() || this.stateValue.phase === "failed") return
       this.finishAssistant("")
       this.fail(error)
     }
@@ -141,7 +190,7 @@ export class AppController {
 
   cancel(): void {
     if (this.stateValue.phase !== "working") return
-    this.setState({ phase: "cancelling", backendMessage: "cancelling…" })
+    this.setState({ phase: "cancelling", backendMessage: "cancelling…", activity: { kind: "idle" } })
     this.backend.cancel()
   }
 
@@ -164,10 +213,18 @@ export class AppController {
       backendMessage: null,
       transcript: [],
       partialAssistantText: "",
+      queuedPrompt: null,
+      activity: { kind: "boot", stage: "session" },
+      interruption: null,
     })
     try {
       await this.backend.newSession()
-      this.setState({ phase: "ready", sessionId: this.backend.activeSessionId })
+      const sessionId = this.backend.activeSessionId
+      if (sessionId) this.assistantStream.begin(sessionId)
+      this.committedAssistantText = ""
+      this.resetLiveMetadata()
+      this.setState({ phase: "ready", sessionId, activity: { kind: "idle" } })
+      await this.drainQueuedPrompt()
     } catch (error) {
       this.fail(error)
     }
@@ -224,7 +281,7 @@ export class AppController {
       arguments: call?.arguments ?? "{}",
       stakes: classifyStakes(call?.name ?? "tool", parseArguments(call?.arguments ?? "{}")),
     }
-    this.setState({ activeOverlay: "approval" })
+    this.setState({ activeOverlay: "approval", activity: { kind: "approval", name: approval.name } })
     try {
       const decision = await this.view.requestApproval(approval)
       return decision.outcome === "selected" && request.optionIds.includes(decision.optionId)
@@ -233,16 +290,72 @@ export class AppController {
     } catch {
       return { outcome: "cancelled" }
     } finally {
-      this.setState({ activeOverlay: null })
+      this.setState({
+        activeOverlay: null,
+        activity: this.stateValue.phase === "working" ? { kind: "thinking" } : { kind: "idle" },
+      })
     }
   }
 
   onAssistantText(text: string): void {
     if (this.stateValue.phase !== "working" && this.stateValue.phase !== "cancelling") return
-    this.setState({ partialAssistantText: `${this.stateValue.partialAssistantText}${text}` })
+    this.committedAssistantText += text
+    const snapshot = this.assistantStream.reconcileCommitted(this.committedAssistantText)
+    this.setState({ partialAssistantText: snapshot.text, activity: { kind: "responding" } })
+  }
+
+  onLiveRecord(record: DshLiveRecord): void {
+    if (this.stateValue.phase !== "working" && this.stateValue.phase !== "cancelling") return
+    const snapshot = this.assistantStream.apply(record)
+    if (record.kind === "tool-start") {
+      this.liveTools.set(record.callId, { name: record.name, arguments: record.arguments })
+      if (!this.seenToolStarts.has(record.callId)) {
+        this.seenToolStarts.add(record.callId)
+        this.setState({
+          partialAssistantText: snapshot.text,
+          activity: { kind: "tool", name: record.name },
+          transcript: [...this.stateValue.transcript, { kind: "tool-call", name: record.name, arguments: record.arguments }],
+        })
+      } else {
+        this.setState({ partialAssistantText: snapshot.text, activity: { kind: "tool", name: record.name } })
+      }
+      return
+    }
+    if (record.kind === "tool-end") {
+      const tool = this.liveTools.get(record.callId)
+      if (!this.seenToolEnds.has(record.callId)) {
+        this.seenToolEnds.add(record.callId)
+        this.setState({
+          partialAssistantText: snapshot.text,
+          activity: { kind: "thinking" },
+          transcript: [...this.stateValue.transcript, {
+            kind: "tool-result",
+            name: tool?.name ?? "tool",
+            text: record.text,
+            isError: record.isError,
+          }],
+        })
+      } else {
+        this.setState({ partialAssistantText: snapshot.text, activity: { kind: "thinking" } })
+      }
+      return
+    }
+    if (record.kind === "usage") {
+      this.applyUsage(record.usage, `${record.turn}:${record.step}`)
+      return
+    }
+    const activity: AppActivity = snapshot.activity === "thinking"
+      ? { kind: "thinking" }
+      : snapshot.activity === "responding"
+        ? { kind: "responding" }
+        : this.stateValue.activity
+    this.setState({ partialAssistantText: snapshot.text, activity })
   }
 
   onSessionChanged(sessionId: string): void {
+    this.assistantStream.begin(sessionId)
+    this.committedAssistantText = ""
+    this.resetLiveMetadata()
     this.setState({ sessionId })
     if (!this.config.toolCards) return
     this.logs.watch({
@@ -260,30 +373,48 @@ export class AppController {
 
   onBackendExit(info: { outcomeUnknown: boolean }): void {
     if (this.stateValue.phase === "closing") return
+    if (info.outcomeUnknown) {
+      const snapshot = this.assistantStream.interrupt("outcome-unknown")
+      this.setState({ partialAssistantText: snapshot.text, interruption: "outcome-unknown", activity: { kind: "idle" } })
+    }
     this.finishAssistant("")
     this.fail(new Error(info.outcomeUnknown ? "Backend exited; prompt outcome is unknown." : "Backend exited."))
   }
 
   async close(): Promise<void> {
     if (this.stateValue.phase === "closing") return
-    this.setState({ phase: "closing", activeOverlay: null })
+    this.setState({ phase: "closing", activeOverlay: null, activity: { kind: "idle" } })
     this.logs.stop()
     await this.backend.close()
   }
 
   private onSessionLogEvent(event: SessionLogEvent): void {
     if (event.kind === "tool-call") {
+      if (this.seenToolStarts.has(event.callId)) return
+      this.seenToolStarts.add(event.callId)
       this.setState({ transcript: [...this.stateValue.transcript, { kind: "tool-call", name: event.name, arguments: event.arguments }] })
     } else if (event.kind === "tool-result") {
+      if (this.seenToolEnds.has(event.callId)) return
+      this.seenToolEnds.add(event.callId)
       this.setState({ transcript: [...this.stateValue.transcript, { kind: "tool-result", name: event.name, text: event.text, isError: event.isError }] })
     } else {
-      const usage = {
-        inputTokens: (this.stateValue.usage.inputTokens ?? 0) + (event.usage.inputTokens ?? 0),
-        outputTokens: (this.stateValue.usage.outputTokens ?? 0) + (event.usage.outputTokens ?? 0),
-        cacheReadTokens: (this.stateValue.usage.cacheReadTokens ?? 0) + (event.usage.cacheReadTokens ?? 0),
-      }
-      this.setState({ usage, costUsd: estimateCostUsd(this.config.model, usage) })
+      const key = event.turn === undefined || event.step === undefined ? undefined : `${event.turn}:${event.step}`
+      this.applyUsage(event.usage, key)
     }
+  }
+
+  private applyUsage(sample: Usage, key?: string): void {
+    if (key && this.seenUsageSteps.has(key)) return
+    if (key) this.seenUsageSteps.add(key)
+    const usage = addUsage(this.stateValue.usage, sample)
+    this.setState({ usage, costUsd: estimateCostUsd(this.config.model, usage) })
+  }
+
+  private resetLiveMetadata(): void {
+    this.seenToolStarts.clear()
+    this.seenToolEnds.clear()
+    this.liveTools.clear()
+    this.seenUsageSteps.clear()
   }
 
   private finishAssistant(_stopReason: string): void {
@@ -295,13 +426,20 @@ export class AppController {
     })
   }
 
+  private async drainQueuedPrompt(): Promise<void> {
+    const queued = this.stateValue.queuedPrompt?.trim()
+    if (!queued || this.stateValue.phase !== "ready") return
+    this.setState({ queuedPrompt: null })
+    await this.runPrompt(queued)
+  }
+
   private addDiagnostic(text: string): void {
     this.setState({ transcript: [...this.stateValue.transcript, { kind: "diagnostic", text }] })
   }
 
   private fail(error: unknown): void {
     const message = error instanceof Error ? error.message : String(error)
-    this.setState({ phase: "failed", backendMessage: message })
+    this.setState({ phase: "failed", backendMessage: message, activity: { kind: "idle" } })
     this.addDiagnostic(message)
   }
 

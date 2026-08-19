@@ -78,6 +78,7 @@ export async function runApp(config: AppConfig): Promise<number> {
 
   const backendEvents: AcpClientEvents = {
     onAssistantText: (text) => controller.onAssistantText(text),
+    onLiveRecord: (record) => controller.onLiveRecord(record),
     onSessionChanged: (sessionId) => controller.onSessionChanged(sessionId),
     onDiagnostic: (message) => controller.onDiagnostic(message),
     onPermission: (request) => controller.decidePermission(request),
@@ -123,6 +124,7 @@ export async function runApp(config: AppConfig): Promise<number> {
 
   view.bind({
     onSubmit: (text) => { void controller.submit(text) },
+    onDraft: (text) => controller.updateDraft(text),
     onCancel: () => controller.cancel(),
     onHistory: () => { void controller.openHistory() },
     onClose: () => { void finish(0) },

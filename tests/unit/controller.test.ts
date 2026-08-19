@@ -21,6 +21,8 @@ function createHarness() {
   let approvalImpl: (request: ApprovalRequest) => Promise<PermissionDecision> = async () => ({ outcome: "cancelled" })
   let sessionNumber = 0
   let activeSessionId: string | null = null
+  let sessionGate: Promise<void> | null = null
+  let releaseSession: (() => void) | undefined
   const renders: AppState[] = []
   const promptCalls: string[] = []
   const backend: BackendPort = {
@@ -28,6 +30,7 @@ function createHarness() {
     async start() {},
     async newSession() {
       const id = `session-${++sessionNumber}`
+      if (sessionGate) await sessionGate
       activeSessionId = id
       return id
     },
@@ -88,6 +91,13 @@ function createHarness() {
         promptResolve = resolve
       })
     },
+    deferSession() {
+      sessionGate = new Promise((resolve) => { releaseSession = resolve })
+      return () => {
+        releaseSession?.()
+        sessionGate = null
+      }
+    },
     finishPrompt(stopReason = "end_turn") {
       promptResolve?.({ stopReason })
     },
@@ -95,6 +105,26 @@ function createHarness() {
 }
 
 describe("AppController", () => {
+  it("queues one editable startup prompt and sends its latest value exactly once", async () => {
+    const harness = createHarness()
+    const releaseSession = harness.deferSession()
+    const starting = harness.controller.start()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    await harness.controller.submit("first")
+    harness.controller.updateDraft("first edited")
+    expect(harness.controller.state.queuedPrompt).toBe("first edited")
+
+    releaseSession()
+    await starting
+
+    expect(harness.promptCalls).toEqual(["first edited"])
+    expect(harness.controller.state.queuedPrompt).toBeNull()
+    expect(harness.controller.state.transcript).toEqual([
+      { kind: "user", text: "first edited" },
+    ])
+  })
+
   it("starts ready, submits one prompt, and renders streamed assistant text", async () => {
     const harness = createHarness()
     harness.deferPrompt()
@@ -111,6 +141,83 @@ describe("AppController", () => {
       { kind: "user", text: "hello" },
       { kind: "assistant", text: "answer" },
     ])
+  })
+
+  it("shows real activity and reconciles live text to one authoritative ACP answer", async () => {
+    const harness = createHarness()
+    harness.deferPrompt()
+    await harness.controller.start()
+    const prompt = harness.controller.submit("hello")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 1, kind: "turn-start", turn: 1 })
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 2, kind: "activity", turn: 1, step: 1, activity: "thinking" })
+    expect(harness.controller.state.activity).toEqual({ kind: "thinking" })
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 3, kind: "text-delta", turn: 1, step: 1, index: 0, text: "hel" })
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 4, kind: "text-final", turn: 1, step: 1, index: 0, text: "hello" })
+    expect(harness.controller.state.partialAssistantText).toBe("hello")
+
+    harness.controller.onAssistantText("hello!")
+    harness.controller.onAssistantText(" Second block.")
+    harness.finishPrompt()
+    await prompt
+
+    expect(harness.controller.state.transcript).toEqual([
+      { kind: "user", text: "hello" },
+      { kind: "assistant", text: "hello! Second block." },
+    ])
+    expect(harness.controller.state.partialAssistantText).toBe("")
+    expect(harness.controller.state.activity).toEqual({ kind: "idle" })
+  })
+
+  it("deduplicates live tool cards and per-step usage against JSONL fallback", async () => {
+    const harness = createHarness()
+    harness.deferPrompt()
+    await harness.controller.start()
+    const prompt = harness.controller.submit("inspect")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    harness.controller.onLiveRecord({
+      v: 1,
+      sessionId: "session-1",
+      seq: 1,
+      kind: "tool-start",
+      turn: 1,
+      step: 1,
+      callId: "call-1",
+      name: "read_file",
+      arguments: "{\"path\":\"README.md\"}",
+    })
+    expect(harness.controller.state.activity).toEqual({ kind: "tool", name: "read_file" })
+    harness.controller.onLiveRecord({
+      v: 1,
+      sessionId: "session-1",
+      seq: 2,
+      kind: "tool-end",
+      turn: 1,
+      step: 1,
+      callId: "call-1",
+      isError: false,
+      text: "contents",
+    })
+    harness.controller.onLiveRecord({
+      v: 1,
+      sessionId: "session-1",
+      seq: 3,
+      kind: "usage",
+      turn: 1,
+      step: 1,
+      usage: { inputTokens: 10, outputTokens: 4, cacheReadTokens: 2 },
+    })
+    harness.logs.emit({ kind: "tool-call", callId: "call-1", name: "read_file", arguments: "{\"path\":\"README.md\"}" })
+    harness.logs.emit({ kind: "tool-result", callId: "call-1", name: "read_file", text: "contents", isError: false })
+    harness.logs.emit({ kind: "usage", turn: 1, step: 1, usage: { inputTokens: 10, outputTokens: 4, cacheReadTokens: 2 } })
+
+    expect(harness.controller.state.transcript.filter((item) => item.kind === "tool-call")).toHaveLength(1)
+    expect(harness.controller.state.transcript.filter((item) => item.kind === "tool-result")).toHaveLength(1)
+    expect(harness.controller.state.usage).toEqual({ inputTokens: 10, outputTokens: 4, cacheReadTokens: 2 })
+    harness.finishPrompt()
+    await prompt
   })
 
   it("blocks duplicate submit without adding a second user turn", async () => {
@@ -156,6 +263,25 @@ describe("AppController", () => {
     harness.finishPrompt()
     await prompt
     expect(harness.controller.state.transcript.filter((entry) => entry.kind === "user")).toHaveLength(1)
+  })
+
+  it("keeps partial live evidence marked unknown after a backend exit", async () => {
+    const harness = createHarness()
+    harness.deferPrompt()
+    await harness.controller.start()
+    const prompt = harness.controller.submit("side effect")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 1, kind: "turn-start", turn: 1 })
+    harness.controller.onLiveRecord({ v: 1, sessionId: "session-1", seq: 2, kind: "text-delta", turn: 1, step: 1, index: 0, text: "possibly applied" })
+
+    harness.controller.onBackendExit({ outcomeUnknown: true })
+    harness.finishPrompt()
+    await prompt
+
+    expect(harness.controller.state.phase).toBe("failed")
+    expect(harness.controller.state.interruption).toBe("outcome-unknown")
+    expect(harness.controller.state.transcript).toContainEqual({ kind: "assistant", text: "possibly applied" })
+    expect(harness.promptCalls).toEqual(["side effect"])
   })
 
   it("fails closed for permission decisions and closes without returning to ready", async () => {

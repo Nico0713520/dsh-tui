@@ -242,17 +242,17 @@ Commit: `feat: stream DSH activity over a side channel`
 - Consumes: backend ACP events, assistant-stream snapshots, live tool/usage records, session-log fallback, and editor draft changes.
 - Produces: observable `AppState` with `activity`, `queuedPrompt`, `partialAssistantText`, interruption, stable tool cards, and deduplicated usage.
 
-- [ ] **Step 1: Write a failing startup-queue controller test**
+- [x] **Step 1: Write a failing startup-queue controller test**
 
 Hold `backend.newSession()`, call `submit("first")`, call `updateDraft("first edited")`, release session creation, and assert `backend.prompt` is called exactly once with `"first edited"`; assert no diagnostic says the backend is unready.
 
-- [ ] **Step 2: Run the test and verify red**
+- [x] **Step 2: Run the test and verify red**
 
 Run: `npx vitest run tests/unit/controller.test.ts -t "queues one editable startup prompt"`
 
 Expected: FAIL because `queuedPrompt` and `updateDraft` do not exist.
 
-- [ ] **Step 3: Add controller state and normal prompt-path queue draining**
+- [x] **Step 3: Add controller state and normal prompt-path queue draining**
 
 Add:
 
@@ -271,19 +271,19 @@ interface AppState {
 
 Make `start()` set backend/session boot stages, queue one starting submission, let `updateDraft()` replace it, drain the latest value through the same private prompt method after readiness, keep failed startup text queued, and reject second Enter without destroying draft content.
 
-- [ ] **Step 4: Write and pass live-stream reconciliation tests**
+- [x] **Step 4: Write and pass live-stream reconciliation tests**
 
 Inject `AssistantStream`; assert thinking activity appears before text, live text replaces rather than duplicates final blocks, ACP commit is exact and idempotent, stale records after a new session are ignored, cancellation preserves text with a cancelled marker, and backend exit preserves text with outcome unknown.
 
-- [ ] **Step 5: Write and pass live tool/usage dedupe tests**
+- [x] **Step 5: Write and pass live tool/usage dedupe tests**
 
 Maintain live tool entries by call id and dedupe terminal tool states. Key usage by `turn:step`; when JSONL later reports the same assistant-message usage, do not add it again. Keep JSONL-only sessions working.
 
-- [ ] **Step 6: Wire the stream in `runApp`**
+- [x] **Step 6: Wire the stream in `runApp`**
 
 Create one assistant stream, call `begin()` on session change, route `onLiveRecord`, route committed ACP text through `reconcileCommitted`, and connect editor draft changes to `controller.updateDraft`.
 
-- [ ] **Step 7: Run checks and commit**
+- [x] **Step 7: Run checks and commit**
 
 Run: `npx vitest run tests/unit/controller.test.ts tests/unit/app.test.ts && npm run typecheck`
 

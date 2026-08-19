@@ -7,7 +7,7 @@ import type { Usage } from "../usage.ts"
 export type SessionLogEvent =
   | { kind: "tool-call"; callId: string; name: string; arguments: string }
   | { kind: "tool-result"; callId: string; name: string; text: string; isError: boolean }
-  | { kind: "usage"; usage: Usage }
+  | { kind: "usage"; usage: Usage; turn?: number; step?: number }
 
 export interface SessionInfo {
   id: string
@@ -69,6 +69,10 @@ function stringArgument(value: unknown): string {
 
 function numeric(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
+function coordinate(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined
 }
 
 function usageFrom(value: unknown): Usage | null {
@@ -272,7 +276,15 @@ function parseEvent(record: unknown, callNames: Map<string, { name: string; argu
   }
   if (record.type === "assistant/message") {
     const usage = usageFrom(data.usage)
-    return usage ? { kind: "usage", usage } : null
+    if (!usage) return null
+    const turn = coordinate(data.turn)
+    const step = coordinate(data.step)
+    return {
+      kind: "usage",
+      usage,
+      ...(turn === undefined ? {} : { turn }),
+      ...(step === undefined ? {} : { step }),
+    }
   }
   return null
 }
