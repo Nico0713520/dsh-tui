@@ -318,29 +318,36 @@ export class AppController {
   }
 
   onLiveRecord(record: DshLiveRecord): void {
-    if (this.stateValue.phase !== "working" && this.stateValue.phase !== "cancelling") return
+    const turnActive = this.stateValue.phase === "working" || this.stateValue.phase === "cancelling"
+    const lateMetadata = this.stateValue.phase === "ready"
+      && (record.kind === "tool-start" || record.kind === "tool-end" || record.kind === "usage")
+    if (!turnActive && !lateMetadata) return
     const snapshot = this.assistantStream.apply(record)
     if (!snapshot.acceptedRecord) return
+    if (lateMetadata && !snapshot.committed) return
     this.turnPerf.mark("first-live-event")
     if (snapshot.text) this.turnPerf.mark("first-live-text")
+    const partialAssistantText = turnActive ? snapshot.text : this.stateValue.partialAssistantText
     if (record.kind === "tool-start") {
-      this.turnPerf.mark("first-visible-activity")
+      if (turnActive) this.turnPerf.mark("first-visible-activity")
+      const activity: AppActivity = turnActive ? { kind: "tool", name: record.name } : this.stateValue.activity
       if (!this.seenToolStarts.has(record.callId) && !this.seenToolEnds.has(record.callId)) {
         this.seenToolStarts.add(record.callId)
         const transcriptIndex = this.stateValue.transcript.length
         this.liveTools.set(record.callId, { name: record.name, transcriptIndex })
         this.setState({
-          partialAssistantText: snapshot.text,
-          activity: { kind: "tool", name: record.name },
+          partialAssistantText,
+          activity,
           transcript: [...this.stateValue.transcript, { kind: "tool-call", name: record.name, arguments: record.arguments }],
         })
       } else {
-        this.setState({ partialAssistantText: snapshot.text, activity: { kind: "tool", name: record.name } })
+        this.setState({ partialAssistantText, activity })
       }
       return
     }
     if (record.kind === "tool-end") {
-      this.turnPerf.mark("first-visible-activity")
+      if (turnActive) this.turnPerf.mark("first-visible-activity")
+      const activity: AppActivity = turnActive ? { kind: "thinking" } : this.stateValue.activity
       const tool = this.liveTools.get(record.callId)
       if (!this.seenToolEnds.has(record.callId)) {
         this.seenToolEnds.add(record.callId)
@@ -355,12 +362,12 @@ export class AppController {
         if (tool && transcript[tool.transcriptIndex]?.kind === "tool-call") transcript[tool.transcriptIndex] = item
         else transcript.push(item)
         this.setState({
-          partialAssistantText: snapshot.text,
-          activity: { kind: "thinking" },
+          partialAssistantText,
+          activity,
           transcript,
         })
       } else {
-        this.setState({ partialAssistantText: snapshot.text, activity: { kind: "thinking" } })
+        this.setState({ partialAssistantText, activity })
       }
       return
     }

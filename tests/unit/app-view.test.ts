@@ -162,6 +162,23 @@ describe("TUI presentation", () => {
     ))
     expect(responding).toContain("responding")
     expect(responding.indexOf("deepseek")).toBe(text.indexOf("deepseek"))
+
+    const cjkTool = stripTerminalSequences(statusText(
+      { ...state, phase: "working", activity: { kind: "tool", name: "读取文件" } },
+      { mode: "acp", model: "deepseek-v4-flash" },
+      32,
+    ))
+    expect(visibleWidth(cjkTool.slice(0, cjkTool.indexOf("deepseek"))))
+      .toBe(visibleWidth(text.slice(0, text.indexOf("deepseek"))))
+
+    const tighter = stripTerminalSequences(statusText(
+      { ...state, phase: "working", activity: { kind: "thinking" } },
+      { mode: "acp", model: "deepseek-v4-flash" },
+      20,
+    ))
+    expect(tighter).toContain("thinking")
+    expect(tighter).toContain("deep")
+    expect(visibleWidth(tighter)).toBeLessThanOrEqual(20)
   })
 
   it("truncates tool results to the visible terminal width", () => {

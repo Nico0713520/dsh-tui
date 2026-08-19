@@ -83,7 +83,16 @@ describe("AssistantStream", () => {
     stream.apply({ v: 1, sessionId: "s-1", seq: 2, kind: "text-delta", turn: 1, step: 1, index: 0, text: "partial" })
 
     expect(stream.interrupt("outcome-unknown")).toMatchObject({ text: "partial", activity: "idle", interruption: "outcome-unknown" })
+    expect(stream.apply({
+      v: 1,
+      sessionId: "s-1",
+      seq: 3,
+      kind: "usage",
+      turn: 1,
+      step: 1,
+      usage: { inputTokens: 1 },
+    }).acceptedRecord).toBe(false)
     expect(stream.reset()).toEqual({ sessionId: null, turn: null, text: "", activity: "idle", committed: false, interruption: null, acceptedRecord: false })
-    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 3, kind: "text-delta", turn: 1, step: 1, index: 0, text: "late" }).text).toBe("")
+    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 4, kind: "text-delta", turn: 1, step: 1, index: 0, text: "late" }).text).toBe("")
   })
 })

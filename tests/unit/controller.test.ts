@@ -301,6 +301,10 @@ describe("AppController", () => {
       arguments: "{}",
     })
     harness.controller.onAssistantText("authoritative")
+    harness.finishPrompt()
+    await prompt
+    expect(harness.controller.state.phase).toBe("ready")
+
     harness.controller.onLiveRecord({
       v: 1,
       sessionId: "session-1",
@@ -324,8 +328,6 @@ describe("AppController", () => {
 
     expect(harness.controller.state.transcript).toContainEqual({ kind: "tool-result", name: "read_file", text: "done", isError: false })
     expect(harness.controller.state.usage).toEqual({ inputTokens: 7, outputTokens: 2, cacheReadTokens: 0 })
-    harness.finishPrompt()
-    await prompt
   })
 
   it("blocks duplicate submit without adding a second user turn", async () => {
