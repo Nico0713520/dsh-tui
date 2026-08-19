@@ -3,6 +3,7 @@ import { join, resolve } from "node:path"
 import { parseArgs } from "node:util"
 
 export type RunMode = "acp" | "echo"
+export type MotionPreference = "full" | "reduced" | "off"
 
 export interface AppConfig {
   mode: RunMode
@@ -10,6 +11,8 @@ export interface AppConfig {
   cwd: string
   persistRoot: string
   toolCards: boolean
+  motion: MotionPreference
+  perf: boolean
   backendCommand?: readonly string[]
 }
 
@@ -21,6 +24,8 @@ interface ParsedValues {
   "persist-root"?: string
   "tool-cards"?: string
   "backend-command-json"?: string
+  motion?: string
+  perf?: boolean
 }
 
 const OPTIONS = {
@@ -31,6 +36,8 @@ const OPTIONS = {
   "persist-root": { type: "string" },
   "tool-cards": { type: "string" },
   "backend-command-json": { type: "string" },
+  motion: { type: "string" },
+  perf: { type: "boolean" },
   help: { type: "boolean" },
   version: { type: "boolean" },
 } as const
@@ -87,6 +94,15 @@ export function loadConfig(
   const toolCards = toolCardsValue === "on" || toolCardsValue === "true"
   const commandValue = parsed["backend-command-json"] ?? env.DSH_ACP_CMD_JSON
   const backendCommand = parseCommand(commandValue)
+  const requestedMotion = parsed.motion ?? env.DSH_TUI_MOTION ?? "full"
+  if (requestedMotion !== "full" && requestedMotion !== "reduced" && requestedMotion !== "off") {
+    throw new Error(`motion must be full, reduced, or off; received ${JSON.stringify(requestedMotion)}`)
+  }
+  const motion: MotionPreference = env.NO_COLOR === undefined ? requestedMotion : "off"
+  const perfValue = parsed.perf === true ? "1" : env.DSH_TUI_PERF ?? "0"
+  if (perfValue !== "0" && perfValue !== "1") {
+    throw new Error(`perf must be 0 or 1; received ${JSON.stringify(perfValue)}`)
+  }
 
   return {
     mode: modeValue,
@@ -94,6 +110,8 @@ export function loadConfig(
     cwd,
     persistRoot,
     toolCards,
+    motion,
+    perf: perfValue === "1",
     ...(backendCommand === undefined ? {} : { backendCommand }),
   }
 }

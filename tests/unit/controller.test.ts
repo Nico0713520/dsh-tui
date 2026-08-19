@@ -10,6 +10,8 @@ const config: AppConfig = {
   cwd: "/workspace/demo",
   persistRoot: "/tmp/sessions",
   toolCards: true,
+  motion: "full",
+  perf: false,
 }
 
 function createHarness() {

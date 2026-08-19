@@ -16,6 +16,8 @@ Options:
   --persist-root <path>          Session persistence root
   --tool-cards <on|off>          Enable or disable live session-log cards
   --backend-command-json <json>  Explicit ACP command array, no shell splitting
+  --motion <full|reduced|off>    Control the non-blocking entrance motion
+  --perf                         Show sanitized turn latency diagnostics
   --help                         Show this help
   --version                      Show the version
 

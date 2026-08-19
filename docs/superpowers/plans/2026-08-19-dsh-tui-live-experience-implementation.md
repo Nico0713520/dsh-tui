@@ -363,33 +363,33 @@ Commit: `perf: render only the active Markdown tail`
 - Consumes: width, motion preference, TTY/color capability, app phase/activity, elapsed time, and first user input.
 - Produces: a compact original header frame, one disposable animation clock, stable-width status copy, and editor submit/draft state.
 
-- [ ] **Step 1: Write failing configuration and pure-frame tests**
+- [x] **Step 1: Write failing configuration and pure-frame tests**
 
 Assert `off`, `reduced`, and `full` parse; invalid values throw; `NO_COLOR` and non-TTY force static mode; widths below 52 use one line; widths below 34 contain no decorative art; frame indexes above 9 settle; no frame exceeds its terminal width.
 
-- [ ] **Step 2: Run the focused tests and verify red**
+- [x] **Step 2: Run the focused tests and verify red**
 
 Run: `npx vitest run tests/unit/config.test.ts tests/unit/deep-pulse.test.ts`
 
 Expected: FAIL because motion configuration and frames are absent.
 
-- [ ] **Step 3: Implement strict motion/perf configuration**
+- [x] **Step 3: Implement strict motion/perf configuration**
 
 Add `motion: "full" | "reduced" | "off"` and `perf: boolean` to `AppConfig`; read `DSH_TUI_MOTION` and `DSH_TUI_PERF`; accept only `full|reduced|off` and `0|1`; force off when `NO_COLOR` is present; expose both settings in CLI help.
 
-- [ ] **Step 4: Implement Deep Pulse and timer ownership**
+- [x] **Step 4: Implement Deep Pulse and timer ownership**
 
 Use 8–10 precomputed cyan/blue wordmark frames at 80 ms, one readiness completion pulse, and a static settled header. Export a pure `deepPulseFrame()` and a `DeepPulseClock` with `start()`, `collapse()`, `complete()`, and `dispose()`; use `unref()`; never sleep or await animation.
 
-- [ ] **Step 5: Integrate activity, elapsed time, editor queue, and responsive disclosure**
+- [x] **Step 5: Integrate activity, elapsed time, editor queue, and responsive disclosure**
 
 Set `editor.disableSubmit` whenever a startup prompt is queued, a prompt is working/cancelling, or an overlay is active. Restore queued startup text after pi-tui clears submission, keep `editor.onChange` linked to the queued value, collapse decoration on any user input, show activity labels `thinking`, `responding`, `tool <name>`, or `approval <name>`, tick elapsed time once per second only while active, and hide cost/tokens/session before phase/model on narrow terminals.
 
-- [ ] **Step 6: Add timer disposal and stable-width status tests**
+- [x] **Step 6: Add timer disposal and stable-width status tests**
 
 Use fake timers to prove no 80 ms timer remains after collapse/settle/stop, elapsed time stops outside active phases, animation stays under 13 fps, and changing activity labels does not shift the model segment.
 
-- [ ] **Step 7: Run checks and commit**
+- [x] **Step 7: Run checks and commit**
 
 Run: `npx vitest run tests/unit/config.test.ts tests/unit/deep-pulse.test.ts tests/unit/app-view.test.ts && npm run typecheck`
 

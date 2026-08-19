@@ -52,6 +52,14 @@ describe("loadConfig", () => {
     expect(() => loadConfig([], { DSH_TOOL_CARDS: "sometimes" }, "linux")).toThrow(/tool-cards/i)
   })
 
+  it("parses strict motion and performance controls", () => {
+    expect(loadConfig(["--motion", "reduced", "--perf"], {}, "linux")).toMatchObject({ motion: "reduced", perf: true })
+    expect(loadConfig([], { DSH_TUI_MOTION: "off", DSH_TUI_PERF: "0" }, "linux")).toMatchObject({ motion: "off", perf: false })
+    expect(loadConfig(["--motion", "full"], { NO_COLOR: "1" }, "linux").motion).toBe("off")
+    expect(() => loadConfig([], { DSH_TUI_MOTION: "sometimes" }, "linux")).toThrow(/motion/i)
+    expect(() => loadConfig([], { DSH_TUI_PERF: "yes" }, "linux")).toThrow(/perf/i)
+  })
+
   it("supports echo mode and rejects malformed configuration", () => {
     expect(loadConfig(["--echo"], {}, "linux").mode).toBe("echo")
     expect(() => loadConfig([], { DSH_TUI_MODE: "bogus" }, "linux")).toThrow(/mode/i)

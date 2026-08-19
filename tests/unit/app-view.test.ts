@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { visibleWidth } from "@earendil-works/pi-tui"
+import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui"
 import type { Component } from "@earendil-works/pi-tui"
 import type { AppState } from "../../src/controller.ts"
 import { headerText, statusText, toolResultText } from "../../src/ui/app-view.ts"
@@ -109,6 +109,27 @@ describe("TUI presentation", () => {
     const text = statusText(state, { mode: "echo", model: "deepseek-v4-flash", notice: "Ctrl+C again to exit" }, 48)
     expect(text).toContain("Ctrl+C again to exit")
     expect(visibleWidth(text)).toBeLessThanOrEqual(48)
+  })
+
+  it("shows real activity with a stable-width status segment", () => {
+    const activities: AppState["activity"][] = [
+      { kind: "thinking" },
+      { kind: "responding" },
+      { kind: "tool", name: "read_file" },
+      { kind: "approval", name: "bash" },
+    ]
+    const statuses = activities.map((activity) => stripTerminalSequences(statusText(
+      { ...state, phase: "working", activity },
+      { mode: "acp", model: "deepseek-v4-flash", elapsedSeconds: 3 },
+      80,
+    )))
+
+    expect(statuses[0]).toContain("thinking")
+    expect(statuses[1]).toContain("responding")
+    expect(statuses[2]).toContain("tool read_file")
+    expect(statuses[3]).toContain("approval bash")
+    expect([...new Set(statuses.map((text) => text.indexOf(" · 3s")))]).toHaveLength(1)
+    expect(statuses.every((text) => visibleWidth(text) <= 80)).toBe(true)
   })
 
   it("truncates tool results to the visible terminal width", () => {

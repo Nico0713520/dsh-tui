@@ -10,6 +10,8 @@ describe("default ACP composition", () => {
       cwd: "/tmp/workspace",
       persistRoot: "/tmp/sessions",
       toolCards: true,
+      motion: "full" as const,
+      perf: false,
     })
 
     expect(command[0]).toBe(process.execPath)
@@ -24,6 +26,8 @@ describe("default ACP composition", () => {
       cwd: "/tmp/workspace",
       persistRoot: "/tmp/sessions",
       toolCards: true,
+      motion: "full" as const,
+      perf: false,
     }
     expect(resolveDefaultBackendCommand(config, "win32").join(" ")).toContain("cordis.windows.yml")
     expect(resolveDefaultBackendCommand(config, "linux").join(" ")).toContain("cordis.posix.yml")

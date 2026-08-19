@@ -35,6 +35,8 @@ describe("live dsh ACP flow", () => {
       cwd: workspace,
       persistRoot: join(workspace, "sessions"),
       toolCards: true,
+      motion: "off",
+      perf: false,
     }
     const states: AppState[] = []
     const permissionRequests: ApprovalRequest[] = []

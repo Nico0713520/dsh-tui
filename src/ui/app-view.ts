@@ -15,11 +15,12 @@ import {
 import type { ApprovalRequest, AppState, ControllerView, HistoryChoice, TranscriptItem } from "../controller.ts"
 import type { PermissionDecision } from "../backend/acp-client.ts"
 import type { SessionInfo } from "../backend/session-log.ts"
-import type { RunMode } from "../config.ts"
+import type { MotionPreference, RunMode } from "../config.ts"
 import { sanitizeTerminalText, singleLine } from "../text.ts"
 import { c, markdownTheme, MARK_TOOL, MARK_TOOL_ERR, MARK_USER, selectTheme, STATUS_PREFIX, toolSummary } from "./theme.ts"
 import { showModalList } from "./modal-list.ts"
 import { createStreamingMarkdownView } from "./streaming-markdown.ts"
+import { DeepPulseClock, ElapsedClock, deepPulseFrame, type DeepPulseTick } from "./deep-pulse.ts"
 
 export interface ViewActions {
   onSubmit(text: string): void
@@ -29,32 +30,49 @@ export interface ViewActions {
   onClose(): void
 }
 
-export function headerText(columns: number): string {
-  if (columns < 52) return "dsh-tui · Enter send · Ctrl+R · Ctrl+C ×2"
-  if (columns < 76) return "dsh-tui · Enter send · Esc stop · Ctrl+R History · Ctrl+C ×2"
-  return "dsh-tui — Enter send · Esc interrupt · Ctrl+R History · Ctrl+C ×2 exit"
+export function headerText(columns: number, brand = "dsh-tui"): string {
+  if (columns < 34) return ""
+  const raw = columns < 52
+    ? `${brand} · Enter send · Ctrl+C ×2`
+    : columns < 76
+      ? `${brand} · Enter send · Esc stop · Ctrl+R History · Ctrl+C ×2`
+      : `${brand} — Enter send · Esc interrupt · Ctrl+R History · Ctrl+C ×2 exit`
+  return truncateToWidth(raw, columns, "…")
 }
 
 export function statusText(
   state: AppState,
-  options: { mode: RunMode; model: string; notice?: string },
+  options: { mode: RunMode; model: string; notice?: string; elapsedSeconds?: number },
   columns: number,
 ): string {
-  const phase = state.phase === "starting" ? c.yellow("starting…")
-    : state.phase === "working" ? c.yellow("working…")
-      : state.phase === "cancelling" ? c.yellow("cancelling…")
-        : state.phase === "failed" ? c.red("failed")
-          : state.phase === "closing" ? c.dim("closing") : c.green("ready")
+  const activity = state.activity.kind === "boot" ? `starting ${state.activity.stage}`
+    : state.activity.kind === "tool" ? `tool ${singleLine(state.activity.name, 12)}`
+      : state.activity.kind === "approval" ? `approval ${singleLine(state.activity.name, 9)}`
+        : state.activity.kind
+  const label = state.queuedPrompt !== null ? "queued"
+    : state.phase === "starting" ? (state.activity.kind === "boot" ? `starting ${state.activity.stage}` : "starting")
+      : state.phase === "cancelling" ? "cancelling"
+      : state.phase === "failed" ? "failed"
+        : state.phase === "closing" ? "closing"
+          : state.phase === "ready" ? "ready" : activity
+  const stableLabel = label.padEnd(16)
+  const colorPhase = (value: string): string => state.phase === "failed" ? c.red(value)
+    : state.phase === "ready" ? c.green(value)
+      : state.phase === "closing" ? c.dim(value) : c.yellow(value)
+  const phase = colorPhase(stableLabel)
   const tokens = state.usage.inputTokens || state.usage.outputTokens || state.usage.cacheReadTokens
     ? c.dim(`${state.usage.inputTokens ?? 0}in/${state.usage.outputTokens ?? 0}out/${state.usage.cacheReadTokens ?? 0}cached`)
     : ""
   const cost = state.costUsd === null ? c.dim("—") : c.dim(`$${state.costUsd.toFixed(6)}`)
   const session = state.sessionId ? c.dim(` · ${singleLine(state.sessionId, 8)}`) : ""
-  const extra = options.notice || state.backendMessage || ""
+  const extra = options.notice || state.backendMessage || state.interruption || ""
   const backend = options.mode === "echo" ? c.dim("echo") : c.blue(singleLine(options.model, 28))
+  const elapsed = options.elapsedSeconds === undefined || (state.phase !== "working" && state.phase !== "cancelling")
+    ? ""
+    : c.dim(` · ${options.elapsedSeconds}s`)
   const raw = extra
-    ? `${STATUS_PREFIX} dsh-tui · ${phase} · ${c.dim(singleLine(extra, Math.max(1, columns - 16)))}\x1b[0m`
-    : `${STATUS_PREFIX} dsh-tui · ${backend} · ${phase}${session} ${tokens} ${cost}\x1b[0m`
+    ? `${STATUS_PREFIX} dsh-tui · ${colorPhase(label)} · ${c.dim(singleLine(extra, Math.max(1, columns - 18)))}\x1b[0m`
+    : `${STATUS_PREFIX} dsh-tui · ${backend} · ${phase}${elapsed}${session} ${tokens} ${cost}\x1b[0m`
   return truncateToWidth(raw, Math.max(8, columns), "…")
 }
 
@@ -87,10 +105,28 @@ export class AppView implements ControllerView {
   private lastQueuedPrompt: string | null = null
   private readonly mode: RunMode
   private readonly model: string
+  private readonly motion: MotionPreference
+  private readonly tty: boolean
+  private readonly pulseClock: DeepPulseClock
+  private readonly elapsedClock: ElapsedClock
+  private pulseTick: DeepPulseTick = { frame: 0, completion: false, settled: false }
+  private elapsedSeconds = 0
 
-  constructor(options: { mode: RunMode; model: string }) {
+  constructor(options: { mode: RunMode; model: string; motion: MotionPreference; tty?: boolean }) {
     this.mode = options.mode
     this.model = options.model
+    this.motion = options.motion
+    this.tty = options.tty ?? process.stdout.isTTY === true
+    this.pulseClock = new DeepPulseClock(this.motion, (tick) => {
+      this.pulseTick = tick
+      this.updateHeader()
+      this.tui.requestRender()
+    })
+    this.elapsedClock = new ElapsedClock((seconds) => {
+      this.elapsedSeconds = seconds
+      this.updateStatus()
+      this.tui.requestRender()
+    })
     const editorTheme: EditorTheme = {
       borderColor: (text) => c.dim(text),
       selectList: selectTheme,
@@ -113,19 +149,32 @@ export class AppView implements ControllerView {
 
   start(): void {
     this.tui.setFocus(this.editor)
+    this.pulseClock.start()
     this.tui.start()
   }
 
   stop(): void {
     if (this.noticeTimer !== null) clearTimeout(this.noticeTimer)
     this.noticeTimer = null
+    this.pulseClock.dispose()
+    this.elapsedClock.dispose()
     this.removeInputListener?.()
     this.removeInputListener = null
     this.tui.stop()
   }
 
   render(state: AppState): void {
+    const previous = this.currentState
     this.currentState = state
+    const wasActive = previous?.phase === "working" || previous?.phase === "cancelling"
+    const isActive = state.phase === "working" || state.phase === "cancelling"
+    if (!wasActive && isActive) this.elapsedClock.start()
+    else if (wasActive && !isActive) {
+      this.elapsedClock.stop()
+      this.elapsedSeconds = 0
+    }
+    if (previous && previous.phase !== "starting" && state.phase === "starting") this.pulseClock.start()
+    if (previous?.phase === "starting" && state.phase === "ready") this.pulseClock.complete()
     if (state.queuedPrompt !== null) {
       if (this.editor.getText() !== state.queuedPrompt) this.editor.setText(state.queuedPrompt)
       this.lastQueuedPrompt = state.queuedPrompt
@@ -147,8 +196,8 @@ export class AppView implements ControllerView {
     }
     this.renderedTranscript = [...state.transcript]
     this.partialAssistant.setText(sanitizeTerminalText(state.partialAssistantText))
-    this.header.setText(c.bold(headerText(this.terminal.columns)))
-    this.status.setText(statusText(state, { mode: this.mode, model: this.model, notice: this.notice }, this.terminal.columns))
+    this.updateHeader()
+    this.updateStatus()
     this.tui.requestRender()
   }
 
@@ -198,6 +247,7 @@ export class AppView implements ControllerView {
   private handleGlobalInput(data: string): { consume?: boolean } | undefined {
     const actions = this.actions
     if (!actions) return undefined
+    this.pulseClock.collapse()
     if (matchesKey(data, "ctrl+c")) {
       const now = Date.now()
       if (now - this.lastCtrlC < 1_500) actions.onClose()
@@ -224,5 +274,26 @@ export class AppView implements ControllerView {
       return { consume: true }
     }
     return undefined
+  }
+
+  private updateHeader(): void {
+    const brand = deepPulseFrame({
+      columns: this.terminal.columns,
+      frame: this.pulseTick.frame,
+      motion: this.motion,
+      tty: this.tty,
+      completion: this.pulseTick.completion,
+    })
+    this.header.setText(headerText(this.terminal.columns, brand))
+  }
+
+  private updateStatus(): void {
+    if (!this.currentState) return
+    this.status.setText(statusText(this.currentState, {
+      mode: this.mode,
+      model: this.model,
+      notice: this.notice,
+      elapsedSeconds: this.elapsedSeconds,
+    }, this.terminal.columns))
   }
 }
