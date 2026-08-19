@@ -1,0 +1,84 @@
+import { mkdtemp, rm } from "node:fs/promises"
+import { spawn } from "node:child_process"
+import { createInterface } from "node:readline"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { fileURLToPath } from "node:url"
+
+const root = await mkdtemp(join(tmpdir(), "dsh-composition-"))
+const configFile = process.platform === "win32" ? "cordis.windows.yml" : "cordis.posix.yml"
+const backendBin = fileURLToPath(import.meta.resolve("@deepseek-ai/dsh-acp-demo/bin"))
+const configPath = fileURLToPath(new URL(`../config/${configFile}`, import.meta.url))
+const child = spawn(process.execPath, [backendBin, "--config", configPath], {
+  cwd: process.cwd(),
+  env: {
+    ...process.env,
+    DSH_MODEL: "deepseek-v4-flash",
+    DSH_PERSIST_ROOT: root,
+    DEEPSEEK_API_KEY: "composition-smoke-placeholder",
+  },
+  stdio: ["pipe", "pipe", "ignore"],
+  windowsHide: true,
+})
+
+const output = createInterface({ input: child.stdout })
+let nextId = 1
+let settled = false
+const pending = new Map()
+const fail = (error) => {
+  for (const request of pending.values()) request.reject(error)
+  pending.clear()
+}
+
+output.on("line", (line) => {
+  try {
+    const frame = JSON.parse(line)
+    if (typeof frame.id !== "number") return
+    const request = pending.get(frame.id)
+    if (!request) return
+    pending.delete(frame.id)
+    if (frame.error) request.reject(new Error("composition RPC error"))
+    else request.resolve(frame.result)
+  } catch {
+    fail(new Error("composition emitted malformed JSON"))
+  }
+})
+child.once("error", () => fail(new Error("composition backend failed to spawn")))
+child.once("exit", (code, signal) => {
+  if (!settled) fail(new Error(`composition backend exited (${code ?? signal ?? "unknown"})`))
+})
+
+function call(method, params) {
+  const id = nextId++
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve, reject })
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`)
+  })
+}
+
+function waitForExit() {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve({ code: child.exitCode, signal: child.signalCode })
+  return new Promise((resolve) => child.once("exit", (code, signal) => resolve({ code, signal })))
+}
+
+const timeout = setTimeout(() => fail(new Error("composition smoke timed out")), 10_000)
+try {
+  const initialized = await call("initialize", {
+    protocolVersion: 1,
+    clientCapabilities: {},
+    clientInfo: { name: "dsh-tui-composition-check", version: "0.1.0" },
+  })
+  if (!initialized || typeof initialized !== "object") throw new Error("composition initialize response was invalid")
+  const session = await call("session/new", { cwd: process.cwd(), mcpServers: [] })
+  if (!session || typeof session.sessionId !== "string" || !session.sessionId) throw new Error("composition session response was invalid")
+  settled = true
+  child.stdin.end()
+  const exit = await waitForExit()
+  if (exit.code !== 0 || exit.signal !== null) throw new Error(`composition backend exited unexpectedly (${exit.code ?? exit.signal ?? "unknown"})`)
+  console.log(`composition check passed: ${process.platform}`)
+} finally {
+  clearTimeout(timeout)
+  output.close()
+  if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL")
+  await rm(root, { recursive: true, force: true })
+}

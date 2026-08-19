@@ -57,9 +57,9 @@ class EchoBackend implements BackendPort {
   }
 }
 
-export function resolveDefaultBackendCommand(_config: AppConfig): readonly string[] {
+export function resolveDefaultBackendCommand(_config: AppConfig, platform: NodeJS.Platform = process.platform): readonly string[] {
   const backendBin = fileURLToPath(import.meta.resolve("@deepseek-ai/dsh-acp-demo/bin"))
-  const configFile = process.platform === "win32" ? "cordis.windows.yml" : "cordis.posix.yml"
+  const configFile = platform === "win32" ? "cordis.windows.yml" : "cordis.posix.yml"
   return [
     process.execPath,
     backendBin,
