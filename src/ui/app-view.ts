@@ -7,6 +7,8 @@ import {
   Text,
   TuiMainScreen,
   matchesKey,
+  truncateToWidth,
+  visibleWidth,
   type EditorTheme,
   type TUI,
 } from "@earendil-works/pi-tui"
@@ -25,18 +27,57 @@ export interface ViewActions {
   onClose(): void
 }
 
+export function headerText(columns: number): string {
+  if (columns < 52) return "dsh-tui · Enter send · Ctrl+R · Ctrl+C ×2"
+  if (columns < 76) return "dsh-tui · Enter send · Esc stop · Ctrl+R History · Ctrl+C ×2"
+  return "dsh-tui — Enter send · Esc interrupt · Ctrl+R History · Ctrl+C ×2 exit"
+}
+
+export function statusText(
+  state: AppState,
+  options: { mode: RunMode; model: string; notice?: string },
+  columns: number,
+): string {
+  const phase = state.phase === "starting" ? c.yellow("starting…")
+    : state.phase === "working" ? c.yellow("working…")
+      : state.phase === "cancelling" ? c.yellow("cancelling…")
+        : state.phase === "failed" ? c.red("failed")
+          : state.phase === "closing" ? c.dim("closing") : c.green("ready")
+  const tokens = state.usage.inputTokens || state.usage.outputTokens || state.usage.cacheReadTokens
+    ? c.dim(`${state.usage.inputTokens ?? 0}in/${state.usage.outputTokens ?? 0}out/${state.usage.cacheReadTokens ?? 0}cached`)
+    : ""
+  const cost = state.costUsd === null ? c.dim("—") : c.dim(`$${state.costUsd.toFixed(6)}`)
+  const session = state.sessionId ? c.dim(` · ${singleLine(state.sessionId, 8)}`) : ""
+  const extra = options.notice || state.backendMessage || ""
+  const backend = options.mode === "echo" ? c.dim("echo") : c.blue(singleLine(options.model, 28))
+  const raw = `${STATUS_PREFIX} dsh-tui · ${backend} · ${phase}${session} ${tokens} ${cost}${extra ? ` ${c.dim(singleLine(extra, 50))}` : ""}\x1b[0m`
+  return truncateToWidth(raw, Math.max(8, columns), "…")
+}
+
+export function toolResultText(item: Extract<TranscriptItem, { kind: "tool-result" }>, columns: number): string {
+  const prefix = item.isError ? MARK_TOOL_ERR : MARK_TOOL
+  const textWidth = Math.max(1, columns - visibleWidth(prefix))
+  const text = singleLine(item.text, textWidth)
+  return `${prefix}${item.isError ? c.red(text) : c.dim(text)}`
+}
+
 export class AppView implements ControllerView {
   readonly terminal = new ProcessTerminal()
   readonly tui: TUI = new TuiMainScreen(this.terminal)
   private readonly transcript = new Container()
+  private readonly committedTranscript = new Container()
+  private readonly partialAssistant = new Markdown("", 1, 0, markdownTheme)
   private readonly scroller = new ScrollView(this.transcript, { follow: "end" })
+  private readonly header = new Text("")
   private readonly status = new Text("")
   private readonly editor: Editor
   private actions: ViewActions | null = null
   private removeInputListener: (() => void) | null = null
   private notice = ""
   private lastCtrlC = 0
+  private noticeTimer: ReturnType<typeof setTimeout> | null = null
   private currentState: AppState | null = null
+  private renderedTranscript: readonly TranscriptItem[] = []
   private readonly mode: RunMode
   private readonly model: string
 
@@ -48,7 +89,9 @@ export class AppView implements ControllerView {
       selectList: selectTheme,
     }
     this.editor = new Editor(this.tui, editorTheme)
-    this.tui.addChild(new Text(`${c.bold("dsh-tui")} ${c.dim("— Enter send · Esc interrupt · Ctrl+R History · Ctrl+C ×2 exit")}`))
+    this.transcript.addChild(this.committedTranscript)
+    this.transcript.addChild(this.partialAssistant)
+    this.tui.addChild(this.header)
     this.tui.addChild(this.scroller)
     this.tui.addChild(this.editor)
     this.tui.addChild(this.status)
@@ -66,6 +109,8 @@ export class AppView implements ControllerView {
   }
 
   stop(): void {
+    if (this.noticeTimer !== null) clearTimeout(this.noticeTimer)
+    this.noticeTimer = null
     this.removeInputListener?.()
     this.removeInputListener = null
     this.tui.stop()
@@ -73,12 +118,18 @@ export class AppView implements ControllerView {
 
   render(state: AppState): void {
     this.currentState = state
-    this.transcript.clear()
-    for (const item of state.transcript) this.addTranscriptItem(item)
-    if (state.partialAssistantText) {
-      this.transcript.addChild(new Markdown(sanitizeTerminalText(state.partialAssistantText), 1, 0, markdownTheme))
+    const extendsRendered = state.transcript.length >= this.renderedTranscript.length
+      && this.renderedTranscript.every((item, index) => item === state.transcript[index])
+    if (!extendsRendered) {
+      this.committedTranscript.clear()
+      for (const item of state.transcript) this.addTranscriptItem(item)
+    } else {
+      for (const item of state.transcript.slice(this.renderedTranscript.length)) this.addTranscriptItem(item)
     }
-    this.status.setText(this.renderStatus(state))
+    this.renderedTranscript = [...state.transcript]
+    this.partialAssistant.setText(sanitizeTerminalText(state.partialAssistantText))
+    this.header.setText(c.bold(headerText(this.terminal.columns)))
+    this.status.setText(statusText(state, { mode: this.mode, model: this.model, notice: this.notice }, this.terminal.columns))
     this.tui.requestRender()
   }
 
@@ -86,8 +137,8 @@ export class AppView implements ControllerView {
     const items = request.optionIds.map((optionId) => ({
       value: optionId,
       label: optionId.includes("allow")
-        ? c.green(`Allow · ${request.name}`)
-        : c.red(`Reject · ${request.name}`),
+        ? c.green(`Allow · ${singleLine(request.name, 32)}`)
+        : c.red(`Reject · ${singleLine(request.name, 32)}`),
       description: singleLine(toolSummary(request.name, request.arguments, 52), 52),
     }))
     if (items.length === 0) return { outcome: "cancelled" }
@@ -111,34 +162,18 @@ export class AppView implements ControllerView {
 
   private addTranscriptItem(item: TranscriptItem): void {
     if (item.kind === "user") {
-      this.transcript.addChild(new Text(`${MARK_USER}${singleLine(item.text, Math.max(10, this.terminal.columns - 4))}`))
+      this.committedTranscript.addChild(new Text(`${MARK_USER}${singleLine(item.text, Math.max(10, this.terminal.columns - 4))}`))
     } else if (item.kind === "assistant") {
-      this.transcript.addChild(new Markdown(sanitizeTerminalText(item.text), 1, 0, markdownTheme))
+      this.committedTranscript.addChild(new Markdown(sanitizeTerminalText(item.text), 1, 0, markdownTheme))
     } else if (item.kind === "tool-call") {
-      this.transcript.addChild(new Text(`${MARK_TOOL}${c.dim(toolSummary(item.name, item.arguments, this.terminal.columns))}`))
+      this.committedTranscript.addChild(new Text(`${MARK_TOOL}${c.dim(toolSummary(item.name, item.arguments, this.terminal.columns))}`))
     } else if (item.kind === "tool-result") {
-      const prefix = item.isError ? MARK_TOOL_ERR : MARK_TOOL
-      this.transcript.addChild(new Text(`${prefix}${item.isError ? c.red(singleLine(item.text, 76)) : c.dim(singleLine(item.text, 76))}`))
+      this.committedTranscript.addChild(new Text(toolResultText(item, this.terminal.columns)))
     } else if (item.kind === "history-boundary") {
-      this.transcript.addChild(new Text(c.dim(singleLine(item.text, Math.max(10, this.terminal.columns - 2)))))
+      this.committedTranscript.addChild(new Text(c.dim(singleLine(item.text, Math.max(10, this.terminal.columns - 2)))))
     } else {
-      this.transcript.addChild(new Text(c.red(`⚠ ${singleLine(item.text, Math.max(10, this.terminal.columns - 4))}`)))
+      this.committedTranscript.addChild(new Text(c.red(`⚠ ${singleLine(item.text, Math.max(10, this.terminal.columns - 4))}`)))
     }
-  }
-
-  private renderStatus(state: AppState): string {
-    const phase = state.phase === "working" ? c.yellow("working…")
-      : state.phase === "cancelling" ? c.yellow("cancelling…")
-        : state.phase === "failed" ? c.red("failed")
-          : state.phase === "closing" ? c.dim("closing") : c.green("ready")
-    const tokens = state.usage.inputTokens || state.usage.outputTokens || state.usage.cacheReadTokens
-      ? c.dim(`${state.usage.inputTokens ?? 0}in/${state.usage.outputTokens ?? 0}out/${state.usage.cacheReadTokens ?? 0}cached`)
-      : ""
-    const cost = state.costUsd === null ? c.dim("—") : c.dim(`$${state.costUsd.toFixed(6)}`)
-    const session = state.sessionId ? c.dim(` · ${state.sessionId.slice(0, 8)}`) : ""
-    const extra = this.notice || state.backendMessage || ""
-    const backend = this.mode === "echo" ? c.dim("echo") : c.blue(singleLine(this.model, 28))
-    return `${STATUS_PREFIX} dsh-tui · ${backend} · ${phase}${session} ${tokens} ${cost}${extra ? ` ${c.dim(singleLine(extra, 50))}` : ""}\x1b[0m`
   }
 
   private handleGlobalInput(data: string): { consume?: boolean } | undefined {
@@ -151,6 +186,12 @@ export class AppView implements ControllerView {
         this.lastCtrlC = now
         this.notice = "Ctrl+C again to exit"
         if (this.currentState) this.render(this.currentState)
+        if (this.noticeTimer !== null) clearTimeout(this.noticeTimer)
+        this.noticeTimer = setTimeout(() => {
+          this.notice = ""
+          this.noticeTimer = null
+          if (this.currentState) this.render(this.currentState)
+        }, 1_500)
       }
       return { consume: true }
     }

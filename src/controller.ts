@@ -31,6 +31,11 @@ export interface ApprovalRequest {
   stakes: ApprovalStakes
 }
 
+export interface PermissionRequest {
+  toolCallId: string
+  optionIds: readonly string[]
+}
+
 export type HistoryChoice =
   | { kind: "new" }
   | { kind: "session"; id: string }
@@ -64,6 +69,7 @@ export class AppController {
   private readonly backend: BackendPort
   private readonly logs: SessionLogPort
   private readonly view: ControllerView
+  private permissionTail: Promise<void> = Promise.resolve()
   private stateValue: AppState = {
     phase: "starting",
     sessionId: null,
@@ -105,6 +111,10 @@ export class AppController {
   async submit(text: string): Promise<void> {
     const value = text.trim()
     if (!value) return
+    if (this.stateValue.activeOverlay !== null) {
+      this.addDiagnostic("Close the current overlay before submitting.")
+      return
+    }
     if (this.stateValue.phase !== "ready") {
       this.addDiagnostic(this.stateValue.phase === "working" || this.stateValue.phase === "cancelling"
         ? "Already working; wait for the current prompt to settle."
@@ -136,6 +146,10 @@ export class AppController {
   }
 
   async newSession(): Promise<void> {
+    if (this.stateValue.activeOverlay !== null) {
+      this.addDiagnostic("Close the current overlay before starting a new session.")
+      return
+    }
     if (this.stateValue.phase === "working" || this.stateValue.phase === "cancelling") {
       this.addDiagnostic("Finish or cancel the current prompt before starting a new session.")
       return
@@ -160,6 +174,7 @@ export class AppController {
   }
 
   async openHistory(): Promise<void> {
+    if (this.stateValue.activeOverlay !== null) return
     if (this.stateValue.phase === "working" || this.stateValue.phase === "cancelling") {
       this.addDiagnostic("History is unavailable while a prompt is running.")
       return
@@ -168,26 +183,38 @@ export class AppController {
     try {
       const sessions = await this.logs.listHistory(this.config.persistRoot, this.config.cwd)
       const choice = await this.view.chooseHistory(sessions)
-      this.setState({ activeOverlay: null })
       if (choice.kind === "new") {
+        this.setState({ activeOverlay: null })
         await this.newSession()
         return
       }
-      if (choice.kind !== "session") return
+      if (choice.kind !== "session") {
+        this.setState({ activeOverlay: null })
+        return
+      }
       const entries = await this.logs.loadHistory(this.config.persistRoot, this.config.cwd, choice.id)
       const replay: TranscriptItem[] = [
         { kind: "history-boundary", text: `── history ${choice.id.slice(0, 8)} (read-only) ──` },
         ...entries.map(historyToTranscript),
         { kind: "history-boundary", text: "── end history · new prompts use the current ACP session ──" },
       ]
-      this.setState({ transcript: [...this.stateValue.transcript, ...replay] })
+      this.setState({ activeOverlay: null, transcript: [...this.stateValue.transcript, ...replay] })
     } catch (error) {
       this.setState({ activeOverlay: null })
       this.addDiagnostic(`History unavailable: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
-  async decidePermission(request: { toolCallId: string; optionIds: readonly string[] }): Promise<PermissionDecision> {
+  decidePermission(request: PermissionRequest): Promise<PermissionDecision> {
+    const result = this.permissionTail.then(
+      () => this.runPermissionRequest(request),
+      () => this.runPermissionRequest(request),
+    )
+    this.permissionTail = result.then(() => undefined, () => undefined)
+    return result
+  }
+
+  private async runPermissionRequest(request: PermissionRequest): Promise<PermissionDecision> {
     if (this.stateValue.phase === "closing") return { outcome: "cancelled" }
     const call = this.logs.lookupCall(request.toolCallId)
     const approval: ApprovalRequest = {

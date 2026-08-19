@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { AppController, type AppState, type BackendPort, type ControllerView, type SessionLogPort } from "../../src/controller.ts"
+import { AppController, type AppState, type ApprovalRequest, type BackendPort, type ControllerView, type HistoryChoice, type SessionLogPort } from "../../src/controller.ts"
 import type { AppConfig } from "../../src/config.ts"
 import type { PermissionDecision } from "../../src/backend/acp-client.ts"
-import type { SessionLogEvent, SessionLogWatchOptions } from "../../src/backend/session-log.ts"
+import type { HistoryEntry, SessionInfo, SessionLogEvent, SessionLogWatchOptions } from "../../src/backend/session-log.ts"
 
 const config: AppConfig = {
   mode: "echo",
@@ -15,9 +15,14 @@ const config: AppConfig = {
 function createHarness() {
   let promptResolve: ((value: { stopReason: string }) => void) | undefined
   let promptImpl: ((text: string) => Promise<{ stopReason: string }>) | undefined
+  let listHistoryImpl: () => Promise<SessionInfo[]> = async () => []
+  let loadHistoryImpl: () => Promise<HistoryEntry[]> = async () => []
+  let chooseHistoryImpl: () => Promise<HistoryChoice> = async () => ({ kind: "cancel" })
+  let approvalImpl: (request: ApprovalRequest) => Promise<PermissionDecision> = async () => ({ outcome: "cancelled" })
   let sessionNumber = 0
   let activeSessionId: string | null = null
   const renders: AppState[] = []
+  const promptCalls: string[] = []
   const backend: BackendPort = {
     get activeSessionId() { return activeSessionId },
     async start() {},
@@ -27,6 +32,7 @@ function createHarness() {
       return id
     },
     async prompt(text) {
+      promptCalls.push(text)
       if (promptImpl) return promptImpl(text)
       return { stopReason: `done:${text}` }
     },
@@ -43,14 +49,14 @@ function createHarness() {
     watch(options) { logs.watched = options },
     stop() {},
     lookupCall() { return { name: "bash", arguments: JSON.stringify({ command: "rm -rf ." }) } },
-    async listHistory() { return [] },
-    async loadHistory() { return [] },
+    async listHistory() { return listHistoryImpl() },
+    async loadHistory() { return loadHistoryImpl() },
     emit(event) { logs.watched?.onEvent(event) },
   }
   const view: ControllerView = {
     render(state) { renders.push(state) },
-    async requestApproval(): Promise<PermissionDecision> { return { outcome: "cancelled" } },
-    async chooseHistory() { return { kind: "cancel" } },
+    async requestApproval(request): Promise<PermissionDecision> { return approvalImpl(request) },
+    async chooseHistory() { return chooseHistoryImpl() },
   }
   return {
     backend,
@@ -58,6 +64,25 @@ function createHarness() {
     view,
     renders,
     controller: new AppController({ config, backend, logs, view }),
+    promptCalls,
+    setHistory(options: {
+      choice?: HistoryChoice
+      sessions?: SessionInfo[]
+      entries?: HistoryEntry[]
+    }) {
+      chooseHistoryImpl = async () => options.choice ?? { kind: "cancel" }
+      listHistoryImpl = async () => options.sessions ?? []
+      loadHistoryImpl = async () => options.entries ?? []
+    },
+    setListHistory(impl: () => Promise<SessionInfo[]>) {
+      listHistoryImpl = impl
+    },
+    setLoadHistory(impl: () => Promise<HistoryEntry[]>) {
+      loadHistoryImpl = impl
+    },
+    setApproval(impl: (request: ApprovalRequest) => Promise<PermissionDecision>) {
+      approvalImpl = impl
+    },
     deferPrompt() {
       promptImpl = async () => new Promise((resolve) => {
         promptResolve = resolve
@@ -144,5 +169,55 @@ describe("AppController", () => {
     harness.finishPrompt()
     await prompt
     expect(harness.controller.state.phase).toBe("closing")
+  })
+
+  it("blocks submit and duplicate History while history storage is loading", async () => {
+    const harness = createHarness()
+    let release!: (sessions: SessionInfo[]) => void
+    let listCalls = 0
+    harness.setListHistory(() => {
+      listCalls += 1
+      return new Promise((resolve) => { release = resolve })
+    })
+    await harness.controller.start()
+    const opening = harness.controller.openHistory()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(harness.controller.state.activeOverlay).toBe("history")
+    await harness.controller.submit("must not send")
+    await harness.controller.openHistory()
+    expect(listCalls).toBe(1)
+    expect(harness.promptCalls).toEqual([])
+
+    release([])
+    await opening
+    expect(harness.controller.state.activeOverlay).toBeNull()
+  })
+
+  it("serializes concurrent permission dialogs", async () => {
+    const harness = createHarness()
+    let releaseFirst!: (decision: PermissionDecision) => void
+    let calls = 0
+    harness.setApproval(async () => {
+      calls += 1
+      if (calls === 1) return new Promise((resolve) => { releaseFirst = resolve })
+      return { outcome: "cancelled" }
+    })
+    await harness.controller.start()
+
+    const first = harness.controller.decidePermission({ toolCallId: "call-1", optionIds: ["allow-once", "reject-once"] })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(calls).toBe(1)
+    expect(harness.controller.state.activeOverlay).toBe("approval")
+
+    const second = harness.controller.decidePermission({ toolCallId: "call-2", optionIds: ["allow-once", "reject-once"] })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(calls).toBe(1)
+
+    releaseFirst({ outcome: "selected", optionId: "allow-once" })
+    await expect(first).resolves.toEqual({ outcome: "selected", optionId: "allow-once" })
+    await expect(second).resolves.toEqual({ outcome: "cancelled" })
+    expect(calls).toBe(2)
+    expect(harness.controller.state.activeOverlay).toBeNull()
   })
 })
