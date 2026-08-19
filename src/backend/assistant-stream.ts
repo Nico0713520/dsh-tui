@@ -48,7 +48,10 @@ export function createAssistantStream(): AssistantStream {
           interruption: null,
         }
       }
-      if (state.committed || state.interruption !== null) return snapshot()
+      if (state.committed || state.interruption !== null) {
+        const metadataOnly = record.kind === "tool-start" || record.kind === "tool-end" || record.kind === "usage"
+        return snapshot(metadataOnly)
+      }
       if (record.kind === "turn-start") return snapshot(true)
       if (record.kind === "activity") {
         state = { ...state, activity: record.activity }

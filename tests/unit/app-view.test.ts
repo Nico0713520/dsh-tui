@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { Markdown, stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui"
 import type { Component } from "@earendil-works/pi-tui"
 import type { AppState } from "../../src/controller.ts"
-import { PaintAwareContainer, headerText, statusText, toolResultText } from "../../src/ui/app-view.ts"
+import { headerText, statusText, toolResultText } from "../../src/ui/app-view.ts"
 import { createStreamingMarkdownView } from "../../src/ui/streaming-markdown.ts"
 import { markdownTheme } from "../../src/ui/theme.ts"
 
@@ -103,17 +103,6 @@ describe("TUI presentation", () => {
     expect(stream.element.render(48)).toEqual(new Markdown(source, 1, 0, markdownTheme).render(48))
   })
 
-  it("reports a live-text paint only when the transcript is actually rendered", () => {
-    let paints = 0
-    const container = new PaintAwareContainer(() => { paints += 1 })
-    container.markPending()
-    expect(paints).toBe(0)
-
-    container.render(48)
-    container.render(48)
-    expect(paints).toBe(1)
-  })
-
   it("keeps header copy within narrow terminal widths", () => {
     expect(visibleWidth(headerText(48))).toBeLessThanOrEqual(48)
     expect(visibleWidth(headerText(64))).toBeLessThanOrEqual(64)
@@ -162,18 +151,17 @@ describe("TUI presentation", () => {
     ))
 
     expect(text).toContain("thinking")
-    expect(text).toContain("deepseek-v4-flash")
+    expect(text).toContain("deepseek")
     expect(text).not.toContain("cached")
     expect(visibleWidth(text)).toBeLessThanOrEqual(32)
 
-    const tighter = stripTerminalSequences(statusText(
-      { ...state, phase: "working", activity: { kind: "thinking" } },
+    const responding = stripTerminalSequences(statusText(
+      { ...state, phase: "working", activity: { kind: "responding" } },
       { mode: "acp", model: "deepseek-v4-flash" },
-      20,
+      32,
     ))
-    expect(tighter).toContain("thinking")
-    expect(tighter).toContain("deep")
-    expect(visibleWidth(tighter)).toBeLessThanOrEqual(20)
+    expect(responding).toContain("responding")
+    expect(responding.indexOf("deepseek")).toBe(text.indexOf("deepseek"))
   })
 
   it("truncates tool results to the visible terminal width", () => {

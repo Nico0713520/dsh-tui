@@ -282,6 +282,52 @@ describe("AppController", () => {
     await prompt
   })
 
+  it("finishes fresh tool and usage records that arrive after ACP text", async () => {
+    const harness = createHarness({ toolCards: false })
+    harness.deferPrompt()
+    await harness.controller.start()
+    const prompt = harness.controller.submit("inspect")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    harness.controller.onLiveRecord({
+      v: 1,
+      sessionId: "session-1",
+      seq: 1,
+      kind: "tool-start",
+      turn: 1,
+      step: 1,
+      callId: "call-1",
+      name: "read_file",
+      arguments: "{}",
+    })
+    harness.controller.onAssistantText("authoritative")
+    harness.controller.onLiveRecord({
+      v: 1,
+      sessionId: "session-1",
+      seq: 2,
+      kind: "tool-end",
+      turn: 1,
+      step: 1,
+      callId: "call-1",
+      isError: false,
+      text: "done",
+    })
+    harness.controller.onLiveRecord({
+      v: 1,
+      sessionId: "session-1",
+      seq: 3,
+      kind: "usage",
+      turn: 1,
+      step: 1,
+      usage: { inputTokens: 7, outputTokens: 2 },
+    })
+
+    expect(harness.controller.state.transcript).toContainEqual({ kind: "tool-result", name: "read_file", text: "done", isError: false })
+    expect(harness.controller.state.usage).toEqual({ inputTokens: 7, outputTokens: 2, cacheReadTokens: 0 })
+    harness.finishPrompt()
+    await prompt
+  })
+
   it("blocks duplicate submit without adding a second user turn", async () => {
     const harness = createHarness()
     harness.deferPrompt()

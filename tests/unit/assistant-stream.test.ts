@@ -47,6 +47,35 @@ describe("AssistantStream", () => {
     expect(stream.apply({ v: 1, sessionId: "other", seq: 99, kind: "turn-start", turn: 9 })).toEqual(committed)
   })
 
+  it("accepts fresh tool metadata after commit without accepting late text", () => {
+    const stream = createAssistantStream()
+    stream.begin("s-1")
+    stream.apply({ v: 1, sessionId: "s-1", seq: 1, kind: "turn-start", turn: 1 })
+    stream.reconcileCommitted("authoritative")
+
+    expect(stream.apply({
+      v: 1,
+      sessionId: "s-1",
+      seq: 2,
+      kind: "tool-end",
+      turn: 1,
+      step: 1,
+      callId: "call-1",
+      isError: false,
+      text: "done",
+    })).toMatchObject({ text: "authoritative", committed: true, acceptedRecord: true })
+    expect(stream.apply({
+      v: 1,
+      sessionId: "s-1",
+      seq: 3,
+      kind: "text-final",
+      turn: 1,
+      step: 1,
+      index: 0,
+      text: "late",
+    })).toMatchObject({ text: "authoritative", committed: true, acceptedRecord: false })
+  })
+
   it("preserves partial evidence on interruption and clears all state on reset", () => {
     const stream = createAssistantStream()
     stream.begin("s-1")

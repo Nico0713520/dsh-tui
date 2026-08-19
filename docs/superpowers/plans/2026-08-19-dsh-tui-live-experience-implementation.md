@@ -508,6 +508,9 @@ Commit: `docs: complete the live experience implementation`
 - [x] Mark first paint from the renderer rather than from render scheduling.
 - [x] Preserve phase and model before usage/cost/session details on narrow terminals.
 - [x] Dispose clocks, live readers, JSONL, overlays, and the ACP child in the specified order.
+- [x] Accept fresh tool/usage metadata after ACP text commits while rejecting late text mutations.
+- [x] Update completed tool cards without rebuilding cached committed Markdown.
+- [x] Keep the compact activity segment fixed-width and prove paint timing only through the PTY seam.
 
 ---
 

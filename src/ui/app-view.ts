@@ -57,7 +57,7 @@ export function statusText(
       : state.phase === "failed" ? "failed"
         : state.phase === "closing" ? "closing"
           : state.phase === "ready" ? "ready" : activity
-  const stableLabel = label.padEnd(16)
+  const stableLabel = singleLine(label, 16).padEnd(16)
   const colorPhase = (value: string): string => state.phase === "failed" ? c.red(value)
     : state.phase === "ready" ? c.green(value)
       : state.phase === "closing" ? c.dim(value) : c.yellow(value)
@@ -70,7 +70,7 @@ export function statusText(
   const extra = options.notice || state.backendMessage || state.interruption || ""
   const width = Math.max(8, columns)
   const backend = options.mode === "echo" ? c.dim("echo") : c.blue(singleLine(options.model, 28))
-  const compactBackendWidth = Math.max(1, width - visibleWidth(` ${label} · `))
+  const compactBackendWidth = Math.max(1, width - visibleWidth(` ${stableLabel} · `))
   const compactBackend = options.mode === "echo"
     ? c.dim(singleLine("echo", compactBackendWidth))
     : c.blue(singleLine(options.model, compactBackendWidth))
@@ -81,8 +81,8 @@ export function statusText(
     ? `${STATUS_PREFIX} dsh-tui · ${backend} · ${colorPhase(label)} · ${c.dim(singleLine(extra, Math.max(1, columns - 18)))}\x1b[0m`
     : `${STATUS_PREFIX} dsh-tui · ${backend} · ${phase}${elapsed}${session} ${tokens} ${cost}\x1b[0m`
   const compact = extra
-    ? `${STATUS_PREFIX} ${colorPhase(label)} · ${compactBackend} · ${c.dim(singleLine(extra, Math.max(1, columns)))}\x1b[0m`
-    : `${STATUS_PREFIX} ${colorPhase(label)} · ${compactBackend}\x1b[0m`
+    ? `${STATUS_PREFIX} ${colorPhase(stableLabel)} · ${compactBackend} · ${c.dim(singleLine(extra, Math.max(1, columns)))}\x1b[0m`
+    : `${STATUS_PREFIX} ${colorPhase(stableLabel)} · ${compactBackend}\x1b[0m`
   const phaseAndExtra = `${STATUS_PREFIX} ${colorPhase(label)}${extra ? ` · ${c.dim(singleLine(extra, Math.max(1, columns)))}` : ""}\x1b[0m`
   const best = [full, compact, phaseAndExtra].find((candidate) => visibleWidth(candidate) <= width) ?? phaseAndExtra
   return truncateToWidth(best, width, "…")
@@ -95,7 +95,7 @@ export function toolResultText(item: Extract<TranscriptItem, { kind: "tool-resul
   return `${prefix}${item.isError ? c.red(text) : c.dim(text)}`
 }
 
-export class PaintAwareContainer extends Container {
+class PaintAwareContainer extends Container {
   private pending = false
   private readonly onPaint: () => void
 
@@ -251,12 +251,22 @@ export class AppView implements ControllerView {
       || state.phase === "working"
       || state.phase === "cancelling"
       || state.activeOverlay !== null
-    const extendsRendered = state.transcript.length >= this.renderedTranscript.length
-      && this.renderedTranscript.every((item, index) => item === state.transcript[index])
-    if (!extendsRendered) {
+    const canReuseRendered = state.transcript.length >= this.renderedTranscript.length
+      && this.renderedTranscript.every((item, index) => item === state.transcript[index]
+        || (item.kind === "tool-call" && state.transcript[index]?.kind === "tool-result"
+          && this.committedTranscript.children[index] instanceof Text))
+    if (!canReuseRendered) {
       this.committedTranscript.clear()
       for (const item of state.transcript) this.addTranscriptItem(item)
     } else {
+      for (let index = 0; index < this.renderedTranscript.length; index += 1) {
+        const previousItem = this.renderedTranscript[index]
+        const nextItem = state.transcript[index]
+        const component = this.committedTranscript.children[index]
+        if (previousItem !== nextItem && previousItem?.kind === "tool-call" && nextItem?.kind === "tool-result" && component instanceof Text) {
+          component.setText(toolResultText(nextItem, this.terminal.columns))
+        }
+      }
       for (const item of state.transcript.slice(this.renderedTranscript.length)) this.addTranscriptItem(item)
     }
     this.renderedTranscript = [...state.transcript]
