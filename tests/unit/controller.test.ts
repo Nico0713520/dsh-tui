@@ -330,6 +330,30 @@ describe("AppController", () => {
     expect(harness.controller.state.usage).toEqual({ inputTokens: 7, outputTokens: 2, cacheReadTokens: 0 })
   })
 
+  it("accepts first-arriving usage after ACP settles without prior live records", async () => {
+    const harness = createHarness({ toolCards: false })
+    harness.deferPrompt()
+    await harness.controller.start()
+    const prompt = harness.controller.submit("inspect")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    harness.controller.onAssistantText("authoritative")
+    harness.finishPrompt()
+    await prompt
+
+    harness.controller.onLiveRecord({
+      v: 1,
+      sessionId: "session-1",
+      seq: 1,
+      kind: "usage",
+      turn: 1,
+      step: 1,
+      usage: { inputTokens: 3, outputTokens: 1 },
+    })
+
+    expect(harness.controller.state.usage).toEqual({ inputTokens: 3, outputTokens: 1, cacheReadTokens: 0 })
+    expect(harness.controller.state.partialAssistantText).toBe("")
+  })
+
   it("blocks duplicate submit without adding a second user turn", async () => {
     const harness = createHarness()
     harness.deferPrompt()

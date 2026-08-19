@@ -5,6 +5,7 @@ describe("AssistantStream", () => {
   it("replaces streamed deltas with the matching final block and then exact ACP text", () => {
     const stream = createAssistantStream()
     stream.begin("s-1")
+    stream.preparePrompt()
     stream.apply({ v: 1, sessionId: "s-1", seq: 1, kind: "turn-start", turn: 1 })
     stream.apply({ v: 1, sessionId: "s-1", seq: 2, kind: "text-delta", turn: 1, step: 1, index: 0, text: "hel" })
 
@@ -79,6 +80,7 @@ describe("AssistantStream", () => {
   it("preserves partial evidence on interruption and clears all state on reset", () => {
     const stream = createAssistantStream()
     stream.begin("s-1")
+    stream.preparePrompt()
     stream.apply({ v: 1, sessionId: "s-1", seq: 1, kind: "turn-start", turn: 1 })
     stream.apply({ v: 1, sessionId: "s-1", seq: 2, kind: "text-delta", turn: 1, step: 1, index: 0, text: "partial" })
 
@@ -98,5 +100,16 @@ describe("AssistantStream", () => {
     expect(stream.apply({ v: 1, sessionId: "s-1", seq: 5, kind: "turn-start", turn: 2 }).acceptedRecord).toBe(true)
     expect(stream.reset()).toEqual({ sessionId: null, turn: null, text: "", activity: "idle", committed: false, interruption: null, acceptedRecord: false })
     expect(stream.apply({ v: 1, sessionId: "s-1", seq: 6, kind: "text-delta", turn: 1, step: 1, index: 0, text: "late" }).text).toBe("")
+  })
+
+  it("rejects an unseen interrupted turn after the next prompt is prepared", () => {
+    const stream = createAssistantStream()
+    stream.begin("s-1")
+    stream.preparePrompt()
+    stream.interrupt("cancelled")
+    stream.preparePrompt()
+
+    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 1, kind: "text-delta", turn: 1, step: 1, index: 0, text: "old" }).acceptedRecord).toBe(false)
+    expect(stream.apply({ v: 1, sessionId: "s-1", seq: 2, kind: "turn-start", turn: 2 }).acceptedRecord).toBe(true)
   })
 })

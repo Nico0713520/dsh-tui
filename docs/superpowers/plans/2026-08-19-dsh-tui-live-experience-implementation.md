@@ -514,6 +514,9 @@ Commit: `docs: complete the live experience implementation`
 - [x] Accept same-turn metadata that crosses ACP settlement, without reopening interrupted or newer turns.
 - [x] Pad activity labels by terminal cell width and reserve model space below 32 columns.
 - [x] Keep interruption sealed until the controller explicitly prepares the user's next prompt.
+- [x] Track the prepared prompt turn even when the interrupted turn emitted no live record.
+- [x] Preserve ACP commitment when the first late record is tool/usage metadata.
+- [x] Budget compact phase, model, and interruption segments together on narrow terminals.
 
 ---
 

@@ -122,6 +122,19 @@ describe("TUI presentation", () => {
     expect(visibleWidth(text)).toBeLessThanOrEqual(48)
   })
 
+  it("keeps phase, model, and interruption in the compact priority status", () => {
+    const text = stripTerminalSequences(statusText(
+      { ...state, interruption: "outcome-unknown" },
+      { mode: "acp", model: "deepseek-v4-flash" },
+      48,
+    ))
+
+    expect(text).toContain("ready")
+    expect(text).toContain("deepseek")
+    expect(text).toContain("outcome-unknown")
+    expect(visibleWidth(text)).toBeLessThanOrEqual(48)
+  })
+
   it("shows real activity with a stable-width status segment", () => {
     const activities: AppState["activity"][] = [
       { kind: "thinking" },

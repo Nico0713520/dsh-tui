@@ -69,13 +69,19 @@ export function statusText(
   const session = state.sessionId ? c.dim(` · ${singleLine(state.sessionId, 8)}`) : ""
   const extra = options.notice || state.backendMessage || state.interruption || ""
   const width = Math.max(8, columns)
-  const backend = options.mode === "echo" ? c.dim("echo") : c.blue(singleLine(options.model, 28))
+  const backendName = options.mode === "echo" ? "echo" : options.model
+  const styleBackend = (value: string): string => options.mode === "echo" ? c.dim(value) : c.blue(value)
+  const backend = styleBackend(singleLine(backendName, 28))
   const compactLabelWidth = Math.max(4, Math.min(16, width - 10))
   const compactLabel = padToCellWidth(label, compactLabelWidth)
   const compactBackendWidth = Math.max(1, width - visibleWidth(` ${compactLabel} · `))
-  const compactBackend = options.mode === "echo"
-    ? c.dim(singleLine("echo", compactBackendWidth))
-    : c.blue(singleLine(options.model, compactBackendWidth))
+  const compactBackend = styleBackend(singleLine(backendName, compactBackendWidth))
+  const extraLabelWidth = Math.max(4, Math.min(10, width - 16))
+  const extraLabel = padToCellWidth(label, extraLabelWidth)
+  const extraBudget = Math.max(2, width - visibleWidth(` ${extraLabel} ·  · `))
+  const extraWidth = Math.max(1, Math.min(visibleWidth(extra), Math.floor(extraBudget / 2)))
+  const extraBackendWidth = Math.max(1, extraBudget - extraWidth)
+  const compactExtra = `${STATUS_PREFIX} ${colorPhase(extraLabel)} · ${styleBackend(singleLine(backendName, extraBackendWidth))} · ${c.dim(singleLine(extra, extraWidth))}\x1b[0m`
   const elapsed = options.elapsedSeconds === undefined || (state.phase !== "working" && state.phase !== "cancelling")
     ? ""
     : c.dim(` · ${options.elapsedSeconds}s`)
@@ -83,7 +89,7 @@ export function statusText(
     ? `${STATUS_PREFIX} dsh-tui · ${backend} · ${colorPhase(label)} · ${c.dim(singleLine(extra, Math.max(1, columns - 18)))}\x1b[0m`
     : `${STATUS_PREFIX} dsh-tui · ${backend} · ${phase}${elapsed}${session} ${tokens} ${cost}\x1b[0m`
   const compact = extra
-    ? `${STATUS_PREFIX} ${colorPhase(compactLabel)} · ${compactBackend} · ${c.dim(singleLine(extra, Math.max(1, columns)))}\x1b[0m`
+    ? compactExtra
     : `${STATUS_PREFIX} ${colorPhase(compactLabel)} · ${compactBackend}\x1b[0m`
   const phaseAndExtra = `${STATUS_PREFIX} ${colorPhase(label)}${extra ? ` · ${c.dim(singleLine(extra, Math.max(1, columns)))}` : ""}\x1b[0m`
   const best = [full, compact, phaseAndExtra].find((candidate) => visibleWidth(candidate) <= width) ?? phaseAndExtra
