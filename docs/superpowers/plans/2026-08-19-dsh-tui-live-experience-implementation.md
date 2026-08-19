@@ -117,7 +117,7 @@ Commit: `feat: decode bounded live backend records`
 - Consumes: validated `DshLiveRecord` values and committed ACP text.
 - Produces: `AssistantStream` and immutable `AssistantStreamSnapshot` exactly as specified in the design.
 
-- [ ] **Step 1: Write the failing tracer test**
+- [x] **Step 1: Write the failing tracer test**
 
 ```ts
 it("replaces streamed deltas with the matching final block and then exact ACP text", () => {
@@ -130,13 +130,13 @@ it("replaces streamed deltas with the matching final block and then exact ACP te
 })
 ```
 
-- [ ] **Step 2: Run the test and verify red**
+- [x] **Step 2: Run the test and verify red**
 
 Run: `npx vitest run tests/unit/assistant-stream.test.ts`
 
 Expected: FAIL because the stream module does not exist.
 
-- [ ] **Step 3: Implement the deep module**
+- [x] **Step 3: Implement the deep module**
 
 Expose only:
 
@@ -154,11 +154,11 @@ export function createAssistantStream(): AssistantStream
 
 Hide the block map, highest sequence, turn, and step ordering. Ignore duplicate/stale sequences and wrong sessions; replace block text on `text-final`; preserve block-index order; make repeated ACP reconciliation idempotent; and return fresh frozen snapshots.
 
-- [ ] **Step 4: Add ordering, dedupe, interruption, reset, and stale-event tests**
+- [x] **Step 4: Add ordering, dedupe, interruption, reset, and stale-event tests**
 
 Use known literal snapshots for multiple indexes, duplicate `seq`, an older turn after a newer turn, wrong session, cancellation, unknown outcome, and post-reset records.
 
-- [ ] **Step 5: Run checks and commit**
+- [x] **Step 5: Run checks and commit**
 
 Run: `npx vitest run tests/unit/assistant-stream.test.ts && npm run typecheck`
 
