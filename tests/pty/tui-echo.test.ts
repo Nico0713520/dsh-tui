@@ -3,6 +3,27 @@ import { visibleWidth } from "@earendil-works/pi-tui"
 import { spawnTui } from "./pty-harness.ts"
 
 describe("real Echo TUI", () => {
+  it("shows the complete welcome immediately and folds it after the first prompt", async () => {
+    const terminal = spawnTui(["src/main.ts", "--echo", "--motion", "off"], { cols: 120, rows: 30 })
+    try {
+      await terminal.waitForText("DeepSeek Harness in your terminal")
+      expect(terminal.screenText()).toContain("workspace-write")
+      expect(terminal.screenText()).toContain("deepseek-v4-flash")
+
+      terminal.write("hello\r")
+      await terminal.waitForText("[echo] hello")
+      expect(terminal.screenText()).not.toContain("DeepSeek Harness in your terminal")
+      expect(terminal.screenText()).toContain("dsh-tui")
+
+      terminal.write("\u0003")
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      terminal.write("\u0003")
+      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+    } finally {
+      terminal.kill()
+    }
+  }, 10_000)
+
   it("submits CJK, handles narrow resize, clears Ctrl+C notice, and exits", async () => {
     const terminal = spawnTui(["src/main.ts", "--echo"], { cols: 80, rows: 24, env: { DSH_TUI_MODE: "echo" } })
     try {

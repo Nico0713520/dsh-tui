@@ -9,6 +9,7 @@ import {
   matchesKey,
   truncateToWidth,
   visibleWidth,
+  type Component,
   type EditorTheme,
   type TUI,
 } from "@earendil-works/pi-tui"
@@ -22,6 +23,7 @@ import { showModalList } from "./modal-list.ts"
 import { createStreamingMarkdownView } from "./streaming-markdown.ts"
 import { DeepPulseClock, ElapsedClock, deepPulseFrame, type DeepPulseTick } from "./deep-pulse.ts"
 import { LatestRenderGate, type DrainSource } from "./render-backpressure.ts"
+import { shouldExpandWelcome, welcomePanelText } from "./welcome-panel.ts"
 
 export interface ViewActions {
   onSubmit(text: string): void
@@ -33,7 +35,7 @@ export interface ViewActions {
 }
 
 export function headerText(columns: number, brand = "dsh-tui"): string {
-  if (columns < 34) return ""
+  if (columns < 34) return columns >= 7 ? "dsh-tui" : ""
   const raw = columns < 52
     ? `${brand} · Enter send · Ctrl+C ×2`
     : columns < 76
@@ -135,6 +137,29 @@ class PaintAwareContainer extends Container {
   }
 }
 
+class AdaptiveText implements Component {
+  private readonly text = new Text("", 1, 1)
+  private lastText = ""
+  private readonly content: (width: number) => string
+
+  constructor(content: (width: number) => string) {
+    this.content = content
+  }
+
+  render(width: number): string[] {
+    const next = this.content(Math.max(1, width - 2))
+    if (next !== this.lastText) {
+      this.lastText = next
+      this.text.setText(next)
+    }
+    return this.text.render(width)
+  }
+
+  invalidate(): void {
+    this.text.invalidate()
+  }
+}
+
 export class AppView implements ControllerView {
   readonly terminal = new ProcessTerminal()
   readonly tui: TUI = new TuiMainScreen(this.terminal)
@@ -144,7 +169,7 @@ export class AppView implements ControllerView {
     markdown: (text) => new Markdown(text, 1, 0, markdownTheme),
   })
   private readonly scroller = new ScrollView(this.transcript, { follow: "end" })
-  private readonly header = new Text("")
+  private readonly header: AdaptiveText
   private readonly status = new Text("")
   private readonly editor: Editor
   private actions: ViewActions | null = null
@@ -157,6 +182,7 @@ export class AppView implements ControllerView {
   private lastQueuedPrompt: string | null = null
   private readonly mode: RunMode
   private readonly model: string
+  private readonly cwd: string
   private readonly motion: MotionPreference
   private readonly tty: boolean
   private readonly pulseClock: DeepPulseClock
@@ -169,14 +195,17 @@ export class AppView implements ControllerView {
   constructor(options: {
     mode: RunMode
     model: string
+    cwd: string
     motion: MotionPreference
     tty?: boolean
     output?: DrainSource
   }) {
     this.mode = options.mode
     this.model = options.model
+    this.cwd = options.cwd
     this.motion = options.motion
     this.tty = options.tty ?? process.stdout.isTTY === true
+    this.header = new AdaptiveText((width) => this.headerContent(width))
     this.pulseClock = new DeepPulseClock(this.motion, (tick) => {
       this.pulseTick = tick
       this.updateHeader()
@@ -188,6 +217,7 @@ export class AppView implements ControllerView {
       this.tui.requestRender()
     })
     this.renderGate = new LatestRenderGate(options.output ?? process.stdout, (state) => this.renderState(state))
+    this.tui.setClearOnShrink(true)
     const editorTheme: EditorTheme = {
       borderColor: (text) => c.dim(text),
       selectList: selectTheme,
@@ -370,15 +400,31 @@ export class AppView implements ControllerView {
     return undefined
   }
 
-  private updateHeader(): void {
+  private headerContent(columns: number): string {
+    if (this.currentState && shouldExpandWelcome(this.currentState)) {
+      return welcomePanelText({
+        columns,
+        tick: this.pulseTick,
+        motion: this.motion,
+        tty: this.tty,
+        model: this.model,
+        cwd: this.cwd,
+        phase: this.currentState.phase,
+        sessionId: this.currentState.sessionId,
+      })
+    }
     const brand = deepPulseFrame({
-      columns: this.terminal.columns,
+      columns,
       frame: this.pulseTick.frame,
       motion: this.motion,
       tty: this.tty,
       completion: this.pulseTick.completion,
     })
-    this.header.setText(headerText(this.terminal.columns, brand))
+    return headerText(columns, brand)
+  }
+
+  private updateHeader(): void {
+    this.header.invalidate()
   }
 
   private updateStatus(): void {

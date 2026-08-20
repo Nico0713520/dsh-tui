@@ -98,7 +98,7 @@ export function loadConfig(
   if (requestedMotion !== "full" && requestedMotion !== "reduced" && requestedMotion !== "off") {
     throw new Error(`motion must be full, reduced, or off; received ${JSON.stringify(requestedMotion)}`)
   }
-  const motion: MotionPreference = env.NO_COLOR === undefined ? requestedMotion : "off"
+  const motion: MotionPreference = requestedMotion
   const perfValue = parsed.perf === true ? "1" : env.DSH_TUI_PERF ?? "0"
   if (perfValue !== "0" && perfValue !== "1") {
     throw new Error(`perf must be 0 or 1; received ${JSON.stringify(perfValue)}`)

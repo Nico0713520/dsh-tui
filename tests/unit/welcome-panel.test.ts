@@ -46,6 +46,14 @@ describe("welcome panel", () => {
     expect(text.split("\n").length).toBeGreaterThanOrEqual(8)
   })
 
+  it("sweeps a visible highlight across the full DSH wordmark without moving it", () => {
+    const first = welcomePanelText({ ...base, columns: 120, tick: { frame: 0, completion: false, settled: false } })
+    const third = welcomePanelText({ ...base, columns: 120, tick: { frame: 2, completion: false, settled: false } })
+
+    expect(first.split("\n")[2]).not.toBe(third.split("\n")[2])
+    expect(stripTerminalSequences(first)).toBe(stripTerminalSequences(third))
+  })
+
   it("removes decoration before identity as the terminal narrows", () => {
     const medium = stripTerminalSequences(welcomePanelText({ ...base, columns: 80 }))
     const narrow = stripTerminalSequences(welcomePanelText({ ...base, columns: 48 }))

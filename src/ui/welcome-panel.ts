@@ -54,6 +54,16 @@ function brand(options: WelcomePanelOptions): string {
   }) || "dsh-tui"
 }
 
+function artLine(line: string, index: number, options: WelcomePanelOptions): string {
+  if (!options.tty || options.motion === "off" || options.tick.settled) return c.cyan(line)
+  if (options.tick.completion) return c.bold(c.cyan(line))
+  const highlight = options.tick.frame % DSH_ART.length
+  const distance = Math.abs(index - highlight)
+  return distance === 0 ? c.bold(c.cyan(line))
+    : distance === 1 ? c.blue(line)
+      : c.dim(line)
+}
+
 function fullPanel(options: WelcomePanelOptions): string {
   const identity = [
     `${brand(options)}  ${c.dim("v0.1")}`,
@@ -62,7 +72,7 @@ function fullPanel(options: WelcomePanelOptions): string {
     "",
     c.dim("fast input · live tools · persistent sessions"),
   ]
-  const art = DSH_ART.map((line, index) => fit(`  ${c.cyan(line)}    ${identity[index] ?? ""}`, options.columns))
+  const art = DSH_ART.map((line, index) => fit(`  ${artLine(line, index, options)}    ${identity[index] ?? ""}`, options.columns))
   const model = safe(options.model, Math.max(8, options.columns - 28))
   const workspace = safe(options.cwd, Math.max(8, options.columns - 16))
   const session = safe(options.sessionId ?? "creating…", 24)

@@ -55,7 +55,7 @@ describe("loadConfig", () => {
   it("parses strict motion and performance controls", () => {
     expect(loadConfig(["--motion", "reduced", "--perf"], {}, "linux")).toMatchObject({ motion: "reduced", perf: true })
     expect(loadConfig([], { DSH_TUI_MOTION: "off", DSH_TUI_PERF: "0" }, "linux")).toMatchObject({ motion: "off", perf: false })
-    expect(loadConfig(["--motion", "full"], { NO_COLOR: "1" }, "linux").motion).toBe("off")
+    expect(loadConfig(["--motion", "full"], { NO_COLOR: "1" }, "linux").motion).toBe("full")
     expect(() => loadConfig([], { DSH_TUI_MOTION: "sometimes" }, "linux")).toThrow(/motion/i)
     expect(() => loadConfig([], { DSH_TUI_PERF: "yes" }, "linux")).toThrow(/perf/i)
   })

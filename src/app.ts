@@ -69,7 +69,7 @@ export function resolveDefaultBackendCommand(_config: AppConfig, platform: NodeJ
 }
 
 export async function runApp(config: AppConfig): Promise<number> {
-  const view = new AppView({ mode: config.mode, model: config.model, motion: config.motion })
+  const view = new AppView({ mode: config.mode, model: config.model, cwd: config.cwd, motion: config.motion })
   const logs = new SessionLogReader()
   let controller!: AppController
   let settled = false
