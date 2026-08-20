@@ -40,6 +40,7 @@ export class DeepPulseClock {
   private timer: ReturnType<typeof setTimeout> | null = null
   private frame = 10
   private settled = true
+  private completionRequested = false
 
   constructor(motion: MotionPreference, onTick: (tick: DeepPulseTick) => void) {
     this.motion = motion
@@ -48,6 +49,7 @@ export class DeepPulseClock {
 
   start(): void {
     this.disposeTimer()
+    this.completionRequested = false
     if (this.motion !== "full") {
       this.frame = 10
       this.settled = true
@@ -66,6 +68,7 @@ export class DeepPulseClock {
         return
       }
       this.onTick({ frame: this.frame, completion: false, settled: false })
+      if (this.completionRequested && this.frame >= 3) this.beginCompletionPulse()
     }, 80)
     this.timer.unref?.()
   }
@@ -73,19 +76,31 @@ export class DeepPulseClock {
   collapse(): void {
     if (this.settled && this.timer === null) return
     this.disposeTimer()
+    this.completionRequested = false
     this.frame = 10
     this.settled = true
     this.onTick({ frame: this.frame, completion: false, settled: true })
   }
 
   complete(): void {
-    this.disposeTimer()
     if (this.motion === "off") {
+      this.disposeTimer()
+      this.completionRequested = false
       this.frame = 10
       this.settled = true
       this.onTick({ frame: this.frame, completion: false, settled: true })
       return
     }
+    if (this.motion === "full" && !this.settled && this.frame < 3) {
+      this.completionRequested = true
+      return
+    }
+    this.beginCompletionPulse()
+  }
+
+  private beginCompletionPulse(): void {
+    this.disposeTimer()
+    this.completionRequested = false
     this.frame = 0
     this.settled = false
     this.onTick({ frame: this.frame, completion: true, settled: false })

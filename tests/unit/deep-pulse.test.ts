@@ -45,6 +45,20 @@ describe("Deep Pulse", () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it("keeps four sweep frames visible when the backend becomes ready immediately", () => {
+    vi.useFakeTimers()
+    const ticks: Array<{ frame: number; completion: boolean }> = []
+    const clock = new DeepPulseClock("full", (tick) => ticks.push(tick))
+
+    clock.start()
+    clock.complete()
+    vi.advanceTimersByTime(240)
+
+    expect(ticks.filter((tick) => !tick.completion).map((tick) => tick.frame)).toEqual([0, 1, 2, 3])
+    expect(ticks.at(-1)?.completion).toBe(true)
+    clock.dispose()
+  })
+
   it("uses only the completion pulse in reduced mode and no timer when off", () => {
     vi.useFakeTimers()
     const reducedTicks: Array<{ completion: boolean }> = []
