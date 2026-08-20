@@ -15,15 +15,21 @@
 
 ~~~bash
 npm install -g @nico0713520/dsh-tui
+dsh-tui auth login
 dsh-tui
 ~~~
 
-默认命令启动真实 ACP 客户端，并使用 deepseek-v4-flash。启动 ACP 前，请在当前 shell 中配置凭证：
+`auth login` 会隐藏输入 DeepSeek API key 并只保存一次；以后启动不再重复询问。如果直接启动 ACP 且尚未配置，也会进入同一次隐藏设置。默认模型是 `deepseek-v4-flash`。
+
+不进入 TUI 也可以管理凭证：
 
 ~~~bash
-export DEEPSEEK_API_KEY="your-key"
-dsh-tui --mode acp --model deepseek-v4-flash
+dsh-tui auth status
+dsh-tui auth login
+dsh-tui auth logout
 ~~~
+
+当前进程继承到的 `DEEPSEEK_API_KEY` 会作为本次启动的只读覆盖，优先级高于已保存凭证。
 
 只想验证安装和 TTY，可以显式使用离线 Echo 模式：
 
@@ -55,7 +61,7 @@ CRITICAL approval
 
 ## 实时体验
 
-dsh-tui 会同时启动后台和非阻塞的 Deep Pulse 入场动画。用户可以立即输入：启动期间提交的一条 prompt 仍可编辑，ACP session ready 后只会发送一次。
+dsh-tui 会同时启动后台和非阻塞的 Deep Pulse 入场动画。空的新会话会展示完整响应式欢迎面板；发送第一条消息后自动收成一行品牌栏，把空间还给对话。用户可以立即输入：启动期间提交的一条 prompt 仍可编辑，ACP session ready 后只会发送一次。
 
 任务进行时，状态栏会区分 thinking、responding、工具调用和审批。短暂活动与流式文本通过可选、有上限的事件管道到达，ACP 仍然是最终回复与 prompt 结算的权威来源。下一条 prompt 开始前，客户端会用不携带内容的控制屏障排空事件管道，避免中断 turn 的延迟记录串入新回复。任一实时管道缺失或异常时，客户端会自动退回 ACP 和 session JSONL，不会让 prompt 失败。推理正文不会被展示，也不会进入诊断信息。
 
@@ -87,11 +93,14 @@ backend command 接收 JSON 数组，不是 shell 命令字符串，也不会交
 
 - Node.js ^22.19.0 或 >=24.0.0。
 - 当前 v0.1 预览固定使用 bundled Harness composition 0.1.0-rc.7。
-- ACP 模式从环境变量 DEEPSEEK_API_KEY 读取凭证；dsh-tui 不保存凭证。
+- 托管凭证保存在 `$DSH_HOME/.credentials.yaml`，默认是 `~/.dsh/.credentials.yaml`；POSIX 下目录/文件权限为 `0700`/`0600`。
+- 非空的进程环境变量 `DEEPSEEK_API_KEY` 始终优先，`auth` 命令不会修改它。
 - --persist-root 修改读取和观察 session JSONL 的位置。
 - --tool-cards off 只关闭 JSONL 旁路卡片，不影响 ACP 回复。
-- DSH_TUI_MOTION 接受 full、reduced 或 off；NO_COLOR 会强制关闭动画。
+- DSH_TUI_MOTION 接受 full、reduced 或 off；NO_COLOR 不再暗中改变动效策略。
 - DSH_TUI_PERF=1 或 --perf 会增加不含事件内容的单轮延迟诊断。
+
+所有者专用文件权限可以防止其他 OS 用户读取 key，但无法隔离同一系统用户运行的所有进程；不要把这个本地存储当成对 coding agent 本身的安全边界。
 
 ## 只读 History 与新会话
 
@@ -112,10 +121,11 @@ backend command 接收 JSON 数组，不是 shell 命令字符串，也不会交
 ~~~bash
 dsh-tui --version
 dsh-tui --help
+dsh-tui auth status
 dsh-tui --echo
 ~~~
 
-ACP 启动失败时检查 Node 版本、DEEPSEEK_API_KEY、模型名和 --cwd。可以用 --persist-root 指定已知可写的 session 目录。接入自定义 ACP 实现时，用 --backend-command-json 传入可执行文件参数数组。
+ACP 启动失败时检查 Node 版本、`dsh-tui auth status`、模型名和 --cwd。可以用 --persist-root 指定已知可写的 session 目录。接入自定义 ACP 实现时，用 --backend-command-json 传入可执行文件参数数组。
 
 ## 开发
 

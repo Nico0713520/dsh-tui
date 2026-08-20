@@ -15,15 +15,21 @@ Safe, readable DeepSeek Harness ACP in the terminal: streaming Markdown, tool ca
 
 ~~~bash
 npm install -g @nico0713520/dsh-tui
+dsh-tui auth login
 dsh-tui
 ~~~
 
-The default command starts the real ACP client and uses deepseek-v4-flash. Set your credential in the shell before starting ACP:
+`auth login` reads the DeepSeek API key without echoing it and saves it once. Later launches start without asking again. A bare ACP launch also offers this one-time hidden setup when no credential exists. The default model is `deepseek-v4-flash`.
+
+Manage the saved credential without starting the TUI:
 
 ~~~bash
-export DEEPSEEK_API_KEY="your-key"
-dsh-tui --mode acp --model deepseek-v4-flash
+dsh-tui auth status
+dsh-tui auth login
+dsh-tui auth logout
 ~~~
+
+An inherited `DEEPSEEK_API_KEY` is a read-only override for that launch and takes precedence over the saved credential.
 
 For an offline installation and TTY smoke test, use the explicit Echo mode:
 
@@ -55,7 +61,7 @@ The approval overlay only accepts an option supplied by ACP. History replay is m
 
 ## Live experience
 
-dsh-tui starts the backend and the non-blocking Deep Pulse entrance together. You can type immediately: one prompt submitted during startup stays editable and is sent exactly once when the ACP session is ready.
+dsh-tui starts the backend and the non-blocking Deep Pulse entrance together. A fresh session shows the complete responsive welcome surface; the first submitted prompt folds it into a one-line brand bar and returns the space to the conversation. You can type immediately: one prompt submitted during startup stays editable and is sent exactly once when the ACP session is ready.
 
 During a turn, the status distinguishes thinking, responding, tool activity, and approval. Transient activity and text arrive over an optional bounded event pipe, while ACP remains authoritative for committed replies and prompt settlement. A content-free control barrier drains the event pipe before the next prompt, so delayed records from an interrupted turn cannot appear in the new turn. If either live pipe is unavailable or malformed, the client falls back to ACP and session JSONL without failing the prompt. Reasoning text is never displayed or copied into diagnostics.
 
@@ -87,11 +93,14 @@ The backend command is a JSON array, not a shell command string. It is never she
 
 - Node.js ^22.19.0 or >=24.0.0.
 - DeepSeek Harness 0.1.0-rc.7 is bundled as the current ACP composition.
-- ACP mode reads DEEPSEEK_API_KEY from your environment; credentials are not stored by dsh-tui.
+- Managed credentials use `$DSH_HOME/.credentials.yaml`, defaulting to `~/.dsh/.credentials.yaml`; the directory/file are `0700`/`0600` on POSIX.
+- A non-empty inherited `DEEPSEEK_API_KEY` always wins and is never modified by `auth` commands.
 - --persist-root changes where session JSONL is read and observed.
 - --tool-cards off disables the JSONL side channel while keeping ACP replies.
-- DSH_TUI_MOTION accepts full, reduced, or off. NO_COLOR forces motion off.
+- DSH_TUI_MOTION accepts full, reduced, or off. NO_COLOR does not silently change motion policy.
 - DSH_TUI_PERF=1 or --perf adds a sanitized per-turn latency diagnostic without event content.
+
+Owner-only file permissions protect a managed key from other OS users, not from every process running as your own user. Do not treat this local store as an isolation boundary from the coding agent itself.
 
 ## Read-only History and new sessions
 
@@ -112,10 +121,11 @@ Choose + New session to create a real ACP session. The previous transcript, part
 ~~~bash
 dsh-tui --version
 dsh-tui --help
+dsh-tui auth status
 dsh-tui --echo
 ~~~
 
-If ACP does not start, check the Node version, DEEPSEEK_API_KEY, model name, and --cwd. Use --persist-root for a known writable session directory. For a custom ACP implementation, pass an executable argument array with --backend-command-json.
+If ACP does not start, check the Node version, `dsh-tui auth status`, model name, and --cwd. Use --persist-root for a known writable session directory. For a custom ACP implementation, pass an executable argument array with --backend-command-json.
 
 ## Development
 

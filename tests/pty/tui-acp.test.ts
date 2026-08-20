@@ -6,6 +6,7 @@ import { listHistory, projectKey } from "../../src/backend/session-log.ts"
 import { spawnTui } from "./pty-harness.ts"
 
 const fixture = join(process.cwd(), "tests/fixtures/fake-acp-server.mjs")
+const TEST_API_KEY = "test-placeholder"
 
 const pause = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 
@@ -23,7 +24,7 @@ function acpArgs(persistRoot: string): string[] {
 
 async function withAcp(scenario: string, run: (terminal: ReturnType<typeof spawnTui>, root: string) => Promise<void>): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "dsh-pty-acp-"))
-  const terminal = spawnTui(acpArgs(root), { env: { FAKE_ACP_SCENARIO: scenario, DSH_TUI_MOTION: "off" }, cols: 80, rows: 24 })
+  const terminal = spawnTui(acpArgs(root), { env: { FAKE_ACP_SCENARIO: scenario, DSH_TUI_MOTION: "off", DEEPSEEK_API_KEY: TEST_API_KEY }, cols: 80, rows: 24 })
   try {
     await terminal.waitForText("fake-001")
     await run(terminal, root)
@@ -37,11 +38,12 @@ describe("real ACP TUI", () => {
   it("keeps one editable startup prompt and shows activity before final text", async () => {
     const root = await mkdtemp(join(tmpdir(), "dsh-pty-startup-"))
     const terminal = spawnTui(acpArgs(root), {
-      env: { FAKE_ACP_SCENARIO: "slow-start-live", DSH_TUI_MOTION: "full", DSH_TUI_PERF: "1" },
+      env: { FAKE_ACP_SCENARIO: "slow-start-live", DSH_TUI_MOTION: "full", DSH_TUI_PERF: "1", DEEPSEEK_API_KEY: TEST_API_KEY },
       cols: 80,
       rows: 24,
     })
     try {
+      await terminal.waitForText("DeepSeek Harness in your terminal")
       await terminal.waitForText("starting")
       terminal.write("first\r")
       await terminal.waitForText("queued")
@@ -154,7 +156,7 @@ describe("real ACP TUI", () => {
       JSON.stringify({ type: "assistant/message", data: { message: { content: [{ type: "text", text: "历史完成" }] } } }),
     ].join("\n") + "\n")
     expect((await listHistory(root, process.cwd())).map((item) => item.id)).toEqual(["hist-1234"])
-    const terminal = spawnTui(acpArgs(root), { env: { FAKE_ACP_SCENARIO: "normal" }, cols: 100, rows: 30 })
+    const terminal = spawnTui(acpArgs(root), { env: { FAKE_ACP_SCENARIO: "normal", DEEPSEEK_API_KEY: TEST_API_KEY }, cols: 100, rows: 30 })
     try {
       await terminal.waitForText("fake-001")
       const historyStart = terminal.rawLength()
@@ -171,6 +173,7 @@ describe("real ACP TUI", () => {
       await terminal.waitForText("+ New session", 8_000, newSessionStart)
       terminal.write("\r")
       await terminal.waitForText("fake-002", 8_000, newSessionStart)
+      await terminal.waitForText("DeepSeek Harness in your terminal", 8_000, newSessionStart)
       terminal.write("\u0003\u0003")
       await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
     } finally {
