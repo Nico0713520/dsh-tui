@@ -10,6 +10,13 @@ const TEST_API_KEY = "test-placeholder"
 
 const pause = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 
+async function exitTui(terminal: ReturnType<typeof spawnTui>): Promise<void> {
+  terminal.write("\u0003")
+  await pause(60)
+  terminal.write("\u0003")
+  await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+}
+
 function acpArgs(persistRoot: string): string[] {
   return [
     "src/main.ts",
@@ -56,8 +63,7 @@ describe("real ACP TUI", () => {
       const liveOutput = terminal.raw().slice(liveStart)
       expect(liveOutput.indexOf("thinking")).toBeLessThan(liveOutput.indexOf("queued:first edited"))
       expect(terminal.screenText()).not.toContain("duplicate prompt")
-      terminal.write("\u0003\u0003")
-      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+      await exitTui(terminal)
     } finally {
       terminal.kill()
       await rm(root, { recursive: true, force: true })
@@ -71,8 +77,7 @@ describe("real ACP TUI", () => {
       terminal.write("\u001b")
       await terminal.waitForText("interrupted")
       expect(terminal.screenText()).toContain("partial evidence")
-      terminal.write("\u0003\u0003")
-      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+      await exitTui(terminal)
     })
   }, 15_000)
 
@@ -82,8 +87,7 @@ describe("real ACP TUI", () => {
       await terminal.waitForText("unknown evidence")
       await terminal.waitForText("outcome is unknown")
       expect(terminal.screenText()).toContain("unknown evidence")
-      terminal.write("\u0003\u0003")
-      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+      await exitTui(terminal)
     })
   }, 15_000)
 
@@ -92,8 +96,7 @@ describe("real ACP TUI", () => {
       terminal.write("fallback\r")
       await terminal.waitForText("live event pipe closed")
       await terminal.waitForText("after close")
-      terminal.write("\u0003\u0003")
-      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+      await exitTui(terminal)
     })
   }, 15_000)
 
@@ -103,8 +106,7 @@ describe("real ACP TUI", () => {
       await terminal.waitForText("approval")
       terminal.write("\r")
       await terminal.waitForText("allowed")
-      terminal.write("\u0003\u0003")
-      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+      await exitTui(terminal)
     })
   }, 15_000)
 
@@ -116,8 +118,7 @@ describe("real ACP TUI", () => {
       await pause(80)
       terminal.write("\r")
       await terminal.waitForText("cancelled")
-      terminal.write("\u0003\u0003")
-      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+      await exitTui(terminal)
     })
   }, 15_000)
 
@@ -128,8 +129,7 @@ describe("real ACP TUI", () => {
       terminal.write("\u001b")
       await terminal.waitForText("cancelled")
       expect(terminal.screenText()).not.toContain("unexpected-session-cancel")
-      terminal.write("\u0003\u0003")
-      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+      await exitTui(terminal)
     })
   }, 15_000)
 
@@ -139,8 +139,7 @@ describe("real ACP TUI", () => {
       await terminal.waitForText("thinking")
       terminal.write("\u001b")
       await terminal.waitForText("cancelled")
-      terminal.write("\u0003\u0003")
-      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+      await exitTui(terminal)
     })
   }, 15_000)
 
@@ -174,8 +173,7 @@ describe("real ACP TUI", () => {
       terminal.write("\r")
       await terminal.waitForText("fake-002", 8_000, newSessionStart)
       await terminal.waitForText("DeepSeek Harness", 8_000, newSessionStart)
-      terminal.write("\u0003\u0003")
-      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+      await exitTui(terminal)
     } finally {
       terminal.kill()
       await rm(root, { recursive: true, force: true })

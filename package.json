@@ -18,7 +18,7 @@
     "bin",
     "dist",
     "config",
-    "assets",
+    "assets/brand",
     "README.md",
     "README.zh-CN.md",
     "THIRD_PARTY_NOTICES.md",

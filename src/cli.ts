@@ -34,7 +34,8 @@ Options:
   --version                      Show the version
 
 Keys:
-  Enter send · Esc interrupt · Ctrl+R history · Ctrl+C twice exit
+  Enter send · Esc interrupt · Ctrl+R history · Ctrl+O tool detail
+  /status session panel · Ctrl+C twice exit
 `
 
 interface OutputPort {

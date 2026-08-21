@@ -4,7 +4,9 @@
 
 ![dsh-tui approval view](https://raw.githubusercontent.com/Nico0713520/dsh-tui/main/assets/screenshot.png)
 
-Safe, readable DeepSeek Harness ACP in the terminal: streaming Markdown, tool cards, explicit permission approval, read-only history, and honest token/cost status.
+An independent community TUI for DeepSeek Harness ACP: streaming Markdown, semantic tool cards, explicit permission approval, read-only history, and honest token/cost status.
+
+DeepSeek and the official blue whale mark belong to their respective owner. This project is not developed, endorsed, sponsored, or published by DeepSeek.
 
 [![CI](https://github.com/Nico0713520/dsh-tui/actions/workflows/ci.yml/badge.svg)](https://github.com/Nico0713520/dsh-tui/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/%40nico0713520%2Fdsh-tui?label=npm)](https://www.npmjs.com/package/@nico0713520/dsh-tui)
@@ -61,17 +63,33 @@ The approval overlay only accepts an option supplied by ACP. History replay is m
 
 ## Live experience
 
-dsh-tui starts the backend and the non-blocking Deep Pulse entrance together. A fresh session shows the complete responsive welcome surface; the first submitted prompt folds it into a one-line brand bar and returns the space to the conversation. You can type immediately: one prompt submitted during startup stays editable and is sent exactly once when the ACP session is ready.
+dsh-tui starts the backend and the non-blocking Quiet Signal entrance together. A fresh session shows the complete responsive welcome surface; the first submitted prompt folds it into a one-line identity row that naturally scrolls away with the conversation. You can type immediately: one prompt submitted during startup stays editable and is sent exactly once when the ACP session is ready.
 
 During a turn, the status distinguishes thinking, responding, tool activity, and approval. Transient activity and text arrive over an optional bounded event pipe, while ACP remains authoritative for committed replies and prompt settlement. A content-free control barrier drains the event pipe before the next prompt, so delayed records from an interrupted turn cannot appear in the new turn. If either live pipe is unavailable or malformed, the client falls back to ACP and session JSONL without failing the prompt. Reasoning text is never displayed or copied into diagnostics.
 
 The frontend coalesces bursty updates and reparses only the active Markdown tail. This reduces event-to-paint delay and terminal churn, but it cannot reduce DeepSeek network or provider time-to-first-token.
+
+## Appearance
+
+The default `terminal` theme preserves the terminal's own background. The optional `deepseek` theme paints a persistent DeepSeek-blue and soft-white canvas without changing the terminal profile:
+
+~~~bash
+dsh-tui theme status
+dsh-tui theme deepseek
+dsh-tui theme terminal
+~~~
+
+The saved preference is resolved after `--theme terminal|deepseek` and `DSH_TUI_THEME`, so a launch-specific override never rewrites the saved setting. `NO_COLOR` disables decorative color while keeping layout and the explicitly requested motion policy.
+
+The welcome uses the unchanged official `#4D6BFE` whale. Kitty/iTerm2 terminals receive the transparent inline image, text-only terminals receive a fixed Braille silhouette sampled from the same artwork, and terminals below 34 columns use text-only identity. The whale itself is never animated; only adjacent status/divider emphasis moves. See [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Keys and options
 
 - Enter sends the editor contents.
 - Esc cancels a working prompt; with an approval/history overlay it closes only that overlay.
 - Ctrl+R opens read-only History.
+- Ctrl+O toggles compact/expanded tool output locally; it is never sent to the model.
+- `/status` opens a read-only Session panel built only from observable runtime facts.
 - Ctrl+C twice exits; the first press shows a temporary notice.
 
 Useful options:
@@ -83,6 +101,7 @@ Useful options:
 --persist-root <path>
 --tool-cards <on|off>
 --motion <full|reduced|off>
+--theme <terminal|deepseek>
 --perf
 dsh-tui --backend-command-json '["node","server.mjs"]'
 ~~~
@@ -98,6 +117,7 @@ The backend command is a JSON array, not a shell command string. It is never she
 - --persist-root changes where session JSONL is read and observed.
 - --tool-cards off disables the JSONL side channel while keeping ACP replies.
 - DSH_TUI_MOTION accepts full, reduced, or off. NO_COLOR does not silently change motion policy.
+- DSH_TUI_THEME accepts terminal or deepseek; CLI override, environment, saved preference, then terminal is the precedence order.
 - DSH_TUI_PERF=1 or --perf adds a sanitized per-turn latency diagnostic without event content.
 
 Owner-only file permissions protect a managed key from other OS users, not from every process running as your own user. Do not treat this local store as an isolation boundary from the coding agent itself.
