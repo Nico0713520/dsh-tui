@@ -224,6 +224,8 @@ export class SessionLogReader {
     const { bytesRead } = await this.fileHandle.read(buffer, 0, buffer.length, this.offset)
     if (bytesRead === 0 || generation !== this.generation) return
     this.offset += bytesRead
+    const settledMetadata = await this.fileHandle.stat()
+    this.lastMetadataStamp = `${settledMetadata.mtimeMs}:${settledMetadata.ctimeMs}`
     this.consumeText(this.decoder.write(buffer.subarray(0, bytesRead)), options)
   }
 
