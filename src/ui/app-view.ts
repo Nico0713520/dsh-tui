@@ -49,13 +49,30 @@ export interface ViewActions {
   onClose(): void
 }
 
+export interface ScrollKeyAction {
+  readonly kind: "by" | "start" | "end"
+  readonly lines: number
+}
+
+/** Map a raw key sequence to a transcript scroll action, or null when unrelated. */
+export function resolveScrollKey(data: string, viewportHeight: number): ScrollKeyAction | null {
+  const viewport = Math.max(1, viewportHeight)
+  if (matchesKey(data, "pageUp")) return { kind: "by", lines: -viewport }
+  if (matchesKey(data, "pageDown")) return { kind: "by", lines: viewport }
+  if (matchesKey(data, "shift+up")) return { kind: "by", lines: -1 }
+  if (matchesKey(data, "shift+down")) return { kind: "by", lines: 1 }
+  if (matchesKey(data, "home")) return { kind: "start", lines: 0 }
+  if (matchesKey(data, "end")) return { kind: "end", lines: 0 }
+  return null
+}
+
 export function headerText(columns: number, brand = "dsh-tui"): string {
   if (columns < 34) return columns >= 7 ? "dsh-tui" : ""
   const raw = columns < 52
     ? `${brand} · Enter send · Ctrl+C ×2`
     : columns < 76
-      ? `${brand} · Enter send · Esc stop · Ctrl+R History · Ctrl+C ×2`
-      : `${brand} — Enter send · Esc interrupt · Ctrl+R History · Ctrl+C ×2 exit`
+      ? `${brand} · Enter send · Esc stop · PgUp scroll · Ctrl+R History · Ctrl+C ×2`
+      : `${brand} — Enter send · Esc interrupt · PgUp/PgDn scroll · Ctrl+R History · Ctrl+C ×2 exit`
   return truncateToWidth(raw, columns, "…")
 }
 
@@ -113,7 +130,7 @@ export class AppView implements ControllerView {
   private readonly committedTranscript = new Container()
   private readonly activeActivity = new Text("", 1, 0)
   private readonly partialAssistant: ReturnType<typeof createStreamingMarkdownView>
-  private readonly scroller = new ScrollView(this.transcript, { follow: "end" })
+  private readonly scroller = new ScrollView(this.transcript, { follow: "end", scrollbar: "auto" })
   private readonly canvas: ThemeCanvas
   private readonly welcome: WelcomeTranscriptComponent
   private readonly status = new Text("")
@@ -416,11 +433,43 @@ export class AppView implements ControllerView {
       actions.onHistory()
       return { consume: true }
     }
+    if (this.handleScrollKey(data)) return { consume: true }
     if (matchesKey(data, "escape")) {
       actions.onCancel()
       return { consume: true }
     }
     return undefined
+  }
+
+  private handleScrollKey(data: string): boolean {
+    const action = resolveScrollKey(data, this.scroller.viewportHeight)
+    if (action === null) return false
+    if (action.kind === "start") {
+      this.scroller.scrollToStart()
+      this.flashScrollNotice("top · End resumes following")
+    } else if (action.kind === "end") {
+      this.scroller.scrollToEnd()
+      this.flashScrollNotice("following output")
+    } else {
+      this.scroller.scrollBy(action.lines)
+      if (this.scroller.isFollowingEnd && action.lines > 0) this.flashScrollNotice("following output")
+      else if (!this.scroller.isFollowingEnd) this.flashScrollNotice("paused · End resumes following")
+    }
+    return true
+  }
+
+  private flashScrollNotice(text: string): void {
+    this.notice = text
+    this.updateStatus()
+    this.tui.requestRender(true)
+    if (this.noticeTimer !== null) clearTimeout(this.noticeTimer)
+    this.noticeTimer = setTimeout(() => {
+      this.notice = ""
+      this.noticeTimer = null
+      this.updateStatus()
+      this.tui.requestRender()
+    }, 1_200)
+    this.noticeTimer.unref?.()
   }
 
   private updateWelcome(): void {
