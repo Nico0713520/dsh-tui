@@ -5,6 +5,7 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     passWithNoTests: false,
     pool: "forks",
+    fileParallelism: process.platform !== "win32",
     restoreMocks: true,
     clearMocks: true,
   },

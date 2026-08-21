@@ -39,7 +39,7 @@ if (scenario === "live-degraded") {
 if (scenario === "stubborn") process.on("SIGTERM", () => {})
 if (scenario === "stdin-close") {
   setInterval(() => {}, 1_000)
-  setTimeout(() => process.exit(0), 1_000)
+  setTimeout(() => process.exit(0), 5_000)
 }
 
 function send(message) {
@@ -81,6 +81,9 @@ input.on("line", (line) => {
     if (scenario === "stdin-close") setTimeout(() => {
       process.stdin.destroy()
       try { closeSync(0) } catch {}
+      liveRecords([
+        { v: 1, sessionId: activeSessionId, seq: 1, kind: "activity", turn: 0, step: 0, activity: "thinking" },
+      ])
     }, 10)
     return
   }

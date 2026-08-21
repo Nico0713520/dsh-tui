@@ -143,7 +143,7 @@ describe("real Echo TUI", () => {
       await new Promise((resolve) => setTimeout(resolve, 50))
       light.write("\u0003")
       await expect(light.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
-      expect(light.raw()).toContain("\x1b[0m")
+      expect(light.raw().includes("\x1b[0m") || light.raw().includes("\x1b[m")).toBe(true)
     } finally {
       light.kill()
     }

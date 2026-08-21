@@ -134,7 +134,7 @@ describe("AcpClient", () => {
     })
     const acp = client("stdin-close", events, { "session/prompt": 2_000 })
     await acp.newSession()
-    await new Promise((resolve) => setTimeout(resolve, 30))
+    await waitFor(() => events.live.length === 1)
 
     await expect(acp.prompt("cannot arrive")).rejects.toThrow(/stdin|exited|unknown/i)
     await waitFor(() => signals.length === 1)

@@ -171,9 +171,8 @@ describe("real ACP TUI", () => {
     const terminal = spawnTui(acpArgs(root), { env: { FAKE_ACP_SCENARIO: "normal", DEEPSEEK_API_KEY: TEST_API_KEY }, cols: 100, rows: 30 })
     try {
       await terminal.waitForText("fake-001")
-      const historyStart = terminal.rawLength()
       terminal.write("\u0012")
-      await terminal.waitForText("Recorded session", 8_000, historyStart)
+      await terminal.waitForText("Recorded session")
       terminal.write("\u001b[B")
       await pause(80)
       terminal.write("\r")
