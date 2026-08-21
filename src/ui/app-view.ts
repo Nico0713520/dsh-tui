@@ -27,6 +27,12 @@ import { createStreamingMarkdownView } from "./streaming-markdown.ts"
 import { DeepPulseClock, ElapsedClock, type DeepPulseTick } from "./deep-pulse.ts"
 import { LatestRenderGate, type DrainSource } from "./render-backpressure.ts"
 import { shouldExpandWelcome, WelcomeTranscriptComponent } from "./welcome-panel.ts"
+import {
+  renderAssistantMessage,
+  renderDiagnostic,
+  renderHistoryBoundary,
+  renderUserMessage,
+} from "./transcript-components.ts"
 
 export interface ViewActions {
   onSubmit(text: string): void
@@ -365,17 +371,17 @@ export class AppView implements ControllerView {
 
   private addTranscriptItem(item: TranscriptItem): void {
     if (item.kind === "user") {
-      this.committedTranscript.addChild(new Text(`${this.theme.fg("brand", "›")} ${singleLine(item.text, Math.max(10, this.terminal.columns - 4))}`))
+      this.committedTranscript.addChild(renderUserMessage(item.text, this.theme))
     } else if (item.kind === "assistant") {
-      this.committedTranscript.addChild(new Markdown(sanitizeTerminalText(item.text), 1, 0, this.theme.markdown))
+      this.committedTranscript.addChild(renderAssistantMessage(item.text, this.theme))
     } else if (item.kind === "tool-call") {
       this.committedTranscript.addChild(new Text(`${this.theme.fg("muted", "⚙")} ${this.theme.fg("muted", toolSummary(item.name, item.arguments, this.terminal.columns))}`))
     } else if (item.kind === "tool-result") {
       this.committedTranscript.addChild(new Text(toolResultText(item, this.terminal.columns, this.theme)))
     } else if (item.kind === "history-boundary") {
-      this.committedTranscript.addChild(new Text(this.theme.fg("muted", singleLine(item.text, Math.max(10, this.terminal.columns - 2)))))
+      this.committedTranscript.addChild(renderHistoryBoundary(item.text, this.theme))
     } else {
-      this.committedTranscript.addChild(new Text(this.theme.fg("error", `⚠ ${singleLine(item.text, Math.max(10, this.terminal.columns - 4))}`)))
+      this.committedTranscript.addChild(renderDiagnostic(item.text, this.theme))
     }
   }
 
