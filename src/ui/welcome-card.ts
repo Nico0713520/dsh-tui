@@ -110,9 +110,9 @@ function renderSplitCard(options: WelcomeCardOptions, width: number): string[] {
     }
     const right = fit(rightContent(row, dividerRow, rightWidth, options.theme), rightWidth)
     if (inlineImage(left)) {
-      const logoWidth = options.columns >= 96 ? 16 : 12
-      const offset = Math.max(0, Math.floor((leftWidth - logoWidth) / 2))
-      lines.push(`${options.theme.fg("border", "│")}${" ".repeat(offset)}${left}${options.theme.fg("border", "│")}${right}${options.theme.fg("border", "│")}`)
+      // Inline-image protocol rows must remain control-sequence-only. Prefixing
+      // border text would expose the encoded payload in conservative terminals.
+      lines.push(left)
       continue
     }
     lines.push(`${options.theme.fg("border", "│")}${fit(left, leftWidth, "center")}${options.theme.fg("border", "│")}${right}${options.theme.fg("border", "│")}`)
@@ -129,7 +129,7 @@ function renderStackedCard(options: WelcomeCardOptions, width: number): string[]
     topBorder(width, options.theme),
     framedLine(options.theme.strong(options.theme.fg("text", "Welcome back!")), width, options.theme, "center"),
     ...renderedLogo.map((line) => inlineImage(line)
-      ? `${options.theme.fg("border", "│")}${line}`
+      ? line
       : framedLine(line, width, options.theme, "center")),
     framedLine(`${options.theme.fg("brand", safeModel(options.model))} ${options.theme.fg("muted", "·")} ${phaseText(options.phase, options.theme)}`, width, options.theme, "center"),
     framedLine(options.theme.fg("muted", "Enter a task or ask about this workspace."), width, options.theme, "center"),

@@ -62,6 +62,10 @@ afterEach(() => resetCapabilitiesCache())
 
 function expectBounded(lines: readonly string[], width: number): void {
   for (const line of lines) {
+    if (line.includes("\x1b]1337;File=") || line.includes("\x1b_G")) {
+      expect(line).not.toContain("image/png")
+      continue
+    }
     const plain = stripTerminalSequences(line)
     expect(visibleWidth(plain)).toBeLessThanOrEqual(width)
     expect(Array.from(plain).some((character) => {
