@@ -10,7 +10,7 @@ import {
 import {
   brandLogoMode,
   createBrandLogo,
-  whaleBraille,
+  whalePixelArt,
 } from "../../src/ui/brand-logo.ts"
 import { createUiTheme } from "../../src/ui/theme.ts"
 
@@ -30,26 +30,34 @@ describe("official DeepSeek whale", () => {
       .toBe("ea65ee127a76ec8617ae01895ddbda3806ab81bdb4edc53f9d27ae29cdd7f372")
   })
 
-  it("selects image, faithful Braille, and text tiers by capability and width", () => {
+  it("selects image, solid pixel, and text tiers by capability and width", () => {
     expect(brandLogoMode({ images: "iterm2", trueColor: true, hyperlinks: true }, 120)).toBe("image")
-    expect(brandLogoMode({ images: null, trueColor: true, hyperlinks: true }, 120)).toBe("braille")
-    expect(brandLogoMode({ images: "kitty", trueColor: true, hyperlinks: true }, 48)).toBe("braille")
+    expect(brandLogoMode({ images: null, trueColor: true, hyperlinks: true }, 120)).toBe("pixel")
+    expect(brandLogoMode({ images: "kitty", trueColor: true, hyperlinks: true }, 48)).toBe("pixel")
     expect(brandLogoMode({ images: null, trueColor: false, hyperlinks: false }, 32)).toBe("text")
   })
 
-  it("uses the stable sampled official silhouette on text terminals", () => {
-    expect(whaleBraille(11)).toEqual([
-      "⢀⣴⣶⣶⣶⣿⡀⢸⣦⣤⣴",
-      "⣾⠛⠻⢿⣿⣿⡿⣶⣿⡟⠁",
-      "⢿⣆⠀⠀⠙⣿⣷⣿⡿⠁",
-      "⠈⠻⢷⣾⣿⣮⡿⠿⠶",
+  it("uses stable solid half-block samples of the official silhouette", () => {
+    expect(whalePixelArt("full")).toEqual([
+      "  ▄▄████  ▄█▄ ▄▄",
+      "▄████████▄ ▀███▀",
+      "█▀ ▀▀████▀████",
+      "██    ▀██████",
+      " ██▄ ▄▄ ████",
+      "  ▀██████▀▀▀▀",
     ])
-    expect(whaleBraille(8)).toEqual([
-      "⣠⣶⣷⣿⣧⣺⣦⣶",
-      "⣿⠉⠙⢿⣿⣿⡟",
-      "⠙⢷⣴⣮⣿⠿⠅",
+    expect(whalePixelArt("compact")).toEqual([
+      " ▄████  █▄▄▄",
+      "███████▄███▀",
+      "█   ▀█████",
+      "▀█  ▄▀███▀",
+      " ▀█████▀▀",
     ])
-    expect(whaleBraille(11).every((line) => visibleWidth(line) <= 11)).toBe(true)
+    expect(whalePixelArt("full")).toHaveLength(6)
+    expect(whalePixelArt("compact")).toHaveLength(5)
+    expect(whalePixelArt("full").every((line) => visibleWidth(line) <= 16)).toBe(true)
+    expect(whalePixelArt("compact").every((line) => visibleWidth(line) <= 12)).toBe(true)
+    expect(whalePixelArt("full").join("\n")).not.toMatch(/[\u2800-\u28ff]/u)
   })
 
   it("renders a real inline image sequence without a filename fallback", () => {

@@ -7,32 +7,38 @@ import {
 } from "@earendil-works/pi-tui"
 import type { UiTheme } from "./theme.ts"
 
-export type BrandLogoMode = "image" | "braille" | "text"
+export type BrandLogoMode = "image" | "pixel" | "text"
+export type WhalePixelTier = "full" | "compact"
 
-const BRAILLE_FULL = [
-  "⢀⣴⣶⣶⣶⣿⡀⢸⣦⣤⣴",
-  "⣾⠛⠻⢿⣿⣿⡿⣶⣿⡟⠁",
-  "⢿⣆⠀⠀⠙⣿⣷⣿⡿⠁",
-  "⠈⠻⢷⣾⣿⣮⡿⠿⠶",
-] as const
-
-const BRAILLE_COMPACT = [
-  "⣠⣶⣷⣿⣧⣺⣦⣶",
-  "⣿⠉⠙⢿⣿⣿⡟",
-  "⠙⢷⣴⣮⣿⠿⠅",
-] as const
+const WHALE_PIXELS: Record<WhalePixelTier, readonly string[]> = {
+  full: [
+    "  ▄▄████  ▄█▄ ▄▄",
+    "▄████████▄ ▀███▀",
+    "█▀ ▀▀████▀████",
+    "██    ▀██████",
+    " ██▄ ▄▄ ████",
+    "  ▀██████▀▀▀▀",
+  ],
+  compact: [
+    " ▄████  █▄▄▄",
+    "███████▄███▀",
+    "█   ▀█████",
+    "▀█  ▄▀███▀",
+    " ▀█████▀▀",
+  ],
+}
 
 export function brandLogoMode(
   capabilities: TerminalCapabilities,
   columns: number,
 ): BrandLogoMode {
   if (columns < 34) return "text"
-  if (columns < 60) return "braille"
-  return capabilities.images === null ? "braille" : "image"
+  if (columns < 60) return "pixel"
+  return capabilities.images === null ? "pixel" : "image"
 }
 
-export function whaleBraille(width: number): readonly string[] {
-  return width >= 11 ? BRAILLE_FULL : BRAILLE_COMPACT
+export function whalePixelArt(tier: WhalePixelTier): readonly string[] {
+  return WHALE_PIXELS[tier]
 }
 
 function readBase64(assetPath: string | URL): string {
@@ -48,18 +54,19 @@ export function createBrandLogo(options: {
   const mode = brandLogoMode(options.capabilities, options.columns)
   if (mode === "text") return null
   const full = options.columns >= 96
-  if (mode === "braille") {
-    return new Text(options.theme.fg("brand", whaleBraille(full ? 11 : 8).join("\n")))
+  const tier: WhalePixelTier = full ? "full" : "compact"
+  if (mode === "pixel") {
+    return new Text(options.theme.fg("brand", whalePixelArt(tier).join("\n")))
   }
   try {
     return new Image(
       readBase64(options.assetPath),
       "image/png",
       { fallbackColor: (text) => options.theme.fg("brand", text) },
-      { maxWidthCells: full ? 11 : 8, maxHeightCells: full ? 4 : 3 },
+      { maxWidthCells: full ? 16 : 12, maxHeightCells: full ? 6 : 5 },
       { widthPx: 63, heightPx: 46 },
     )
   } catch {
-    return new Text(options.theme.fg("brand", whaleBraille(full ? 11 : 8).join("\n")))
+    return new Text(options.theme.fg("brand", whalePixelArt(tier).join("\n")))
   }
 }
