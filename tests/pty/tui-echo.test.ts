@@ -119,7 +119,7 @@ describe("real Echo TUI", () => {
     })
     try {
       await terminal.waitForText("DeepSeek Harness")
-      expect(terminal.raw()).toContain("\x1b]1337;File=")
+      await terminal.waitForRaw("\x1b]1337;File=")
       expect(terminal.raw()).not.toContain("image/png")
       terminal.write("\u0003")
       await new Promise((resolve) => setTimeout(resolve, 50))

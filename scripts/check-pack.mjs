@@ -28,6 +28,8 @@ if (forbidden.length > 0) throw new Error(`forbidden package files: ${forbidden.
 if (!executable) throw new Error("bin/dsh-tui.js is missing from the package")
 if (!livePlugin) throw new Error("config/dsh-tui-live-events.mjs is missing from the package")
 if (!brandSvg || !brandCache || !notices) throw new Error("brand assets or third-party notices are missing from the package")
-if ((Number(executable.mode) & 0o111) === 0) throw new Error("bin/dsh-tui.js is not executable")
+if (process.platform !== "win32" && (Number(executable.mode) & 0o111) === 0) {
+  throw new Error("bin/dsh-tui.js is not executable")
+}
 
 console.log(`pack allowlist passed: ${files.length} files`)

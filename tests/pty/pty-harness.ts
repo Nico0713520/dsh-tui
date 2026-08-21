@@ -122,6 +122,7 @@ export interface PtyHarness {
   write(data: string): void
   resize(columns: number, rows: number): void
   waitForText(needle: string, timeoutMs?: number, fromOffset?: number): Promise<void>
+  waitForRaw(needle: string, timeoutMs?: number, fromOffset?: number): Promise<void>
   waitForExit(): Promise<{ exitCode: number; signal: number | null }>
   kill(): void
 }
@@ -174,6 +175,15 @@ export function spawnTui(
           const rawTail = sanitizeTerminalText(raw).slice(-500).replace(/\n/g, "\\n")
           const screenTail = screen.text().slice(-1000).replace(/\n/g, "\\n")
           throw new Error(`PTY output did not contain ${needle}; raw tail: ${rawTail}; screen tail: ${screenTail}`)
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      }
+    },
+    async waitForRaw(needle, timeoutMs = 8_000, fromOffset = 0) {
+      const started = Date.now()
+      while (!raw.slice(fromOffset).includes(needle)) {
+        if (Date.now() - started > timeoutMs) {
+          throw new Error(`raw PTY output did not contain ${JSON.stringify(needle)}`)
         }
         await new Promise((resolve) => setTimeout(resolve, 20))
       }
