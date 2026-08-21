@@ -30,11 +30,11 @@ describe("loadConfig", () => {
   })
 
   it("uses platform-safe persistence defaults", () => {
-    const win = loadConfig([], {}, "win32")
+    const win = loadConfig([], { LOCALAPPDATA: "C:\\Users\\test\\AppData\\Local" }, "win32")
     const mac = loadConfig([], {}, "darwin")
     const linux = loadConfig([], { XDG_STATE_HOME: "/tmp/state" }, "linux")
 
-    expect(win.persistRoot).toContain("dsh-tui")
+    expect(win.persistRoot).toBe("C:\\Users\\test\\AppData\\Local\\dsh-tui\\sessions")
     expect(mac.persistRoot).toContain("dsh-tui")
     expect(linux.persistRoot).toBe("/tmp/state/dsh-tui/sessions")
   })

@@ -1,5 +1,5 @@
 import { homedir } from "node:os"
-import { join, resolve } from "node:path"
+import { posix, win32 } from "node:path"
 import { parseArgs } from "node:util"
 import type { ThemePreference, UiPreferences } from "./preferences.ts"
 
@@ -68,13 +68,14 @@ function parseCommand(value: string | undefined): readonly string[] | undefined 
 
 function defaultPersistRoot(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string {
   const home = homedir()
+  const paths = platform === "win32" ? win32 : posix
   if (platform === "win32") {
-    return join(env.LOCALAPPDATA ?? join(home, "AppData", "Local"), "dsh-tui", "sessions")
+    return paths.join(env.LOCALAPPDATA ?? paths.join(home, "AppData", "Local"), "dsh-tui", "sessions")
   }
   if (platform === "darwin") {
-    return join(home, "Library", "Application Support", "dsh-tui", "sessions")
+    return paths.join(home, "Library", "Application Support", "dsh-tui", "sessions")
   }
-  return join(env.XDG_STATE_HOME ?? join(home, ".local", "state"), "dsh-tui", "sessions")
+  return paths.join(env.XDG_STATE_HOME ?? paths.join(home, ".local", "state"), "dsh-tui", "sessions")
 }
 
 export function loadConfig(
@@ -83,6 +84,7 @@ export function loadConfig(
   platform: NodeJS.Platform = process.platform,
   defaults: UiPreferences = { theme: "terminal" },
 ): AppConfig {
+  const paths = platform === "win32" ? win32 : posix
   const parsed = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true, strict: true }).values as ParsedValues
   const modeValue = parsed.echo === true ? "echo" : parsed.mode ?? env.DSH_TUI_MODE ?? "acp"
   if (modeValue !== "echo" && modeValue !== "acp") {
@@ -90,8 +92,8 @@ export function loadConfig(
   }
 
   const model = nonEmpty(parsed.model ?? env.DSH_MODEL ?? "deepseek-v4-flash", "model")!
-  const cwd = resolve(nonEmpty(parsed.cwd ?? env.DSH_CWD ?? process.cwd(), "cwd")!)
-  const persistRoot = resolve(nonEmpty(parsed["persist-root"] ?? env.DSH_PERSIST_ROOT ?? defaultPersistRoot(env, platform), "persist root")!)
+  const cwd = paths.resolve(nonEmpty(parsed.cwd ?? env.DSH_CWD ?? process.cwd(), "cwd")!)
+  const persistRoot = paths.resolve(nonEmpty(parsed["persist-root"] ?? env.DSH_PERSIST_ROOT ?? defaultPersistRoot(env, platform), "persist root")!)
   const toolCardsValue = parsed["tool-cards"] ?? env.DSH_TOOL_CARDS ?? "on"
   if (!["on", "off", "true", "false"].includes(toolCardsValue)) {
     throw new Error(`tool-cards must be on, off, true, or false; received ${JSON.stringify(toolCardsValue)}`)

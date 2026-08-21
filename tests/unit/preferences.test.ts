@@ -21,29 +21,29 @@ describe("UI preferences", () => {
     expect(preferenceFilePath({}, "/Users/test", "darwin"))
       .toBe("/Users/test/Library/Application Support/dsh-tui/settings.json")
     expect(preferenceFilePath({ APPDATA: "C:\\Users\\test\\AppData\\Roaming" }, "C:\\Users\\test", "win32"))
-      .toBe("C:\\Users\\test\\AppData\\Roaming/dsh-tui/settings.json")
+      .toBe("C:\\Users\\test\\AppData\\Roaming\\dsh-tui\\settings.json")
   })
 
-  it("persists a validated theme atomically with private POSIX permissions", async () => {
+  it("persists a validated theme atomically with private POSIX permissions where supported", async () => {
     const home = await mkdtemp(join(tmpdir(), "dsh-tui-preferences-"))
     roots.push(home)
-    const options = { env: {}, home, platform: "linux" as const }
+    const options = { env: {}, home, platform: process.platform }
 
     expect(loadUiPreferences(options)).toEqual({ theme: "terminal" })
     await saveThemePreference("deepseek", options)
 
     expect(loadUiPreferences(options)).toEqual({ theme: "deepseek" })
-    const path = preferenceFilePath({}, home, "linux")
+    const path = preferenceFilePath({}, home, process.platform)
     expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ theme: "deepseek" })
-    expect((await stat(path)).mode & 0o777).toBe(0o600)
+    if (process.platform !== "win32") expect((await stat(path)).mode & 0o777).toBe(0o600)
   })
 
   it("rejects malformed settings without echoing their contents", async () => {
     const home = await mkdtemp(join(tmpdir(), "dsh-tui-preferences-invalid-"))
     roots.push(home)
-    const options = { env: {}, home, platform: "linux" as const }
+    const options = { env: {}, home, platform: process.platform }
     await saveThemePreference("terminal", options)
-    const path = preferenceFilePath({}, home, "linux")
+    const path = preferenceFilePath({}, home, process.platform)
     await import("node:fs/promises").then(({ writeFile }) => writeFile(path, '{"theme":"secret-value"}', { mode: 0o600 }))
 
     expect(() => loadUiPreferences(options)).toThrow(path)

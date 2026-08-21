@@ -21,9 +21,8 @@ describe("SessionLogReader", () => {
   it("keeps project keys stable across platform-shaped paths", () => {
     expect(projectKey("/Users/demo/项目")).toBe("--Users-demo-~9879~76EE--")
     expect(projectKey("C:\\Program Files\\demo")).toBe("--C-Program~0020Files-demo--")
-    expect(resolveSessionLogPath("/tmp/root", "/workspace/demo", "s1")).toBe(
-      "/tmp/root/--workspace-demo--/s1/session.jsonl",
-    )
+    expect(resolveSessionLogPath("/tmp/root", "/workspace/demo", "s1"))
+      .toBe(join("/tmp/root", "--workspace-demo--", "s1", "session.jsonl"))
   })
 
   it("reads split JSON and split UTF-8 without dropping records", async () => {

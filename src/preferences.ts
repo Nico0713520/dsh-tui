@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { chmod, mkdir, rename, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
-import { dirname, join } from "node:path"
+import { dirname, posix, win32 } from "node:path"
 
 export type ThemePreference = "terminal" | "deepseek"
 
@@ -24,13 +24,14 @@ export function preferenceFilePath(
   home = homedir(),
   platform: NodeJS.Platform = process.platform,
 ): string {
+  const paths = platform === "win32" ? win32 : posix
   if (platform === "win32") {
-    return join(env.APPDATA ?? join(home, "AppData", "Roaming"), "dsh-tui", "settings.json")
+    return paths.join(env.APPDATA ?? paths.join(home, "AppData", "Roaming"), "dsh-tui", "settings.json")
   }
   if (platform === "darwin") {
-    return join(home, "Library", "Application Support", "dsh-tui", "settings.json")
+    return paths.join(home, "Library", "Application Support", "dsh-tui", "settings.json")
   }
-  return join(env.XDG_CONFIG_HOME ?? join(home, ".config"), "dsh-tui", "settings.json")
+  return paths.join(env.XDG_CONFIG_HOME ?? paths.join(home, ".config"), "dsh-tui", "settings.json")
 }
 
 export function loadUiPreferences(options: PreferenceOptions = {}): UiPreferences {

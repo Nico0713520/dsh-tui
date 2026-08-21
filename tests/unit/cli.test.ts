@@ -20,7 +20,7 @@ async function harness(secret = "unit-test-secret") {
   const configs: unknown[] = []
   const dependencies: CliDependencies = {
     home,
-    platform: "linux",
+    platform: process.platform,
     stdout: { write(text) { output += text } },
     stderr: { write(text) { errors += text } },
     readSecret: async () => {
@@ -50,7 +50,7 @@ describe("dsh-tui CLI authentication", () => {
     expect(test.secretReads()).toBe(1)
     expect(test.output()).toMatch(/saved/i)
     expect(test.output()).not.toContain("unit-test-secret")
-    await expect(describeDeepSeekCredential({ env: {}, home: test.home, platform: "linux" }))
+    await expect(describeDeepSeekCredential({ env: {}, home: test.home, platform: process.platform }))
       .resolves.toMatchObject({ configured: true, source: "managed" })
 
     await expect(runCli(["auth", "status"], {}, test.dependencies)).resolves.toBe(0)
@@ -58,7 +58,7 @@ describe("dsh-tui CLI authentication", () => {
     expect(test.output()).not.toContain("unit-test-secret")
 
     await expect(runCli(["auth", "logout"], {}, test.dependencies)).resolves.toBe(0)
-    await expect(describeDeepSeekCredential({ env: {}, home: test.home, platform: "linux" }))
+    await expect(describeDeepSeekCredential({ env: {}, home: test.home, platform: process.platform }))
       .resolves.toMatchObject({ configured: false, source: "missing" })
   })
 

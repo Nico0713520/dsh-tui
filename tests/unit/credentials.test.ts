@@ -24,7 +24,7 @@ async function tempHome(): Promise<string> {
 describe("DeepSeek credential storage", () => {
   it("persists once and lets an inherited credential override the managed value", async () => {
     const home = await tempHome()
-    const options = { env: {}, home, platform: "linux" as const }
+    const options = { env: {}, home, platform: process.platform }
 
     await expect(describeDeepSeekCredential(options)).resolves.toEqual({
       configured: false,
@@ -42,7 +42,7 @@ describe("DeepSeek credential storage", () => {
     await expect(describeDeepSeekCredential({
       env: { DEEPSEEK_API_KEY: "one-run-override" },
       home,
-      platform: "linux",
+      platform: process.platform,
     })).resolves.toEqual({
       configured: true,
       source: "environment",
@@ -50,14 +50,16 @@ describe("DeepSeek credential storage", () => {
     })
 
     const filename = credentialFilePath({}, home)
-    expect((await stat(join(home, ".dsh"))).mode & 0o777).toBe(0o700)
-    expect((await stat(filename)).mode & 0o777).toBe(0o600)
+    if (process.platform !== "win32") {
+      expect((await stat(join(home, ".dsh"))).mode & 0o777).toBe(0o700)
+      expect((await stat(filename)).mode & 0o777).toBe(0o600)
+    }
     expect(await readFile(filename, "utf8")).toContain("managed-test-secret")
   })
 
   it("preserves unrelated entries and removes only the DeepSeek credential", async () => {
     const home = await tempHome()
-    const options = { env: {}, home, platform: "linux" as const }
+    const options = { env: {}, home, platform: process.platform }
     const filename = credentialFilePath({}, home)
 
     await storeDeepSeekCredential("managed-test-secret", options)
@@ -73,18 +75,21 @@ describe("DeepSeek credential storage", () => {
     const home = await tempHome()
     const filename = credentialFilePath({}, home)
     const credentialDir = join(home, ".dsh")
-    await storeDeepSeekCredential("initial", { env: {}, home, platform: "linux" })
+    const options = { env: {}, home, platform: process.platform }
+    await storeDeepSeekCredential("initial", options)
     await writeFile(filename, "DEEPSEEK_API_KEY: leaked-parser-secret\nDEEPSEEK_API_KEY: duplicate", { mode: 0o600 })
 
-    const malformed = await describeDeepSeekCredential({ env: {}, home, platform: "linux" }).catch((error: unknown) => error)
+    const malformed = await describeDeepSeekCredential(options).catch((error: unknown) => error)
     expect(String(malformed)).toMatch(/invalid credential document/i)
     expect(String(malformed)).not.toContain("leaked-parser-secret")
 
-    await writeFile(filename, "DEEPSEEK_API_KEY: hidden\n", { mode: 0o644 })
-    await chmod(filename, 0o644)
-    const permissions = await describeDeepSeekCredential({ env: {}, home, platform: "linux" }).catch((error: unknown) => error)
-    expect(String(permissions)).toContain("chmod 600")
-    expect(String(permissions)).not.toContain("hidden")
+    if (process.platform !== "win32") {
+      await writeFile(filename, "DEEPSEEK_API_KEY: hidden\n", { mode: 0o644 })
+      await chmod(filename, 0o644)
+      const permissions = await describeDeepSeekCredential(options).catch((error: unknown) => error)
+      expect(String(permissions)).toContain("chmod 600")
+      expect(String(permissions)).not.toContain("hidden")
+    }
     expect((await stat(credentialDir)).isDirectory()).toBe(true)
   })
 
@@ -94,7 +99,7 @@ describe("DeepSeek credential storage", () => {
     await expect(storeDeepSeekCredential("managed", {
       env: { DEEPSEEK_API_KEY: "override" },
       home,
-      platform: "linux",
+      platform: process.platform,
     })).rejects.toThrow(/environment/i)
   })
 })
