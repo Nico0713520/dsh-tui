@@ -11,10 +11,22 @@ describe("real Echo TUI", () => {
       expect(terminal.screenText()).toContain("workspace-write")
       expect(terminal.screenText()).toContain("deepseek-v4-flash")
 
+      const promptStart = terminal.rawLength()
       terminal.write("hello\r")
       await terminal.waitForText("[echo] hello")
+      await terminal.waitForText("端。", 2_000, promptStart)
+      await terminal.waitForText("ready", 2_000, promptStart)
+      await new Promise((resolve) => setTimeout(resolve, 100))
       expect(terminal.screenText()).not.toContain("⢀⣴⣶")
       expect(terminal.screenText()).toContain("DeepSeek Harness")
+
+      const statusStart = terminal.rawLength()
+      terminal.write("/status\r")
+      await terminal.waitForText("Session", 2_000, statusStart)
+      await terminal.waitForText("workspace-write", 2_000, statusStart)
+      expect(terminal.raw().slice(statusStart)).not.toContain("[echo] /status")
+      terminal.write("\u001b")
+      await new Promise((resolve) => setTimeout(resolve, 100))
 
       terminal.write("\u0003")
       await new Promise((resolve) => setTimeout(resolve, 50))

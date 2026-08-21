@@ -2,18 +2,21 @@ import {
   Container,
   SelectList,
   Text,
+  matchesKey,
+  truncateToWidth,
+  visibleWidth,
   type Component,
   type OverlayHandle,
   type SelectItem,
   type TUI,
 } from "@earendil-works/pi-tui"
-import { matchesKey } from "@earendil-works/pi-tui"
 import { createUiTheme, type UiTheme } from "./theme.ts"
 
 export class ModalList implements Component {
   private readonly body: Container
   private readonly list: SelectList
   private readonly onResult: (value: string | null) => void
+  private readonly theme: UiTheme
   private settled = false
   private overlay: OverlayHandle | null = null
 
@@ -25,13 +28,14 @@ export class ModalList implements Component {
     theme: UiTheme = createUiTheme("terminal"),
   ) {
     this.onResult = onResult
+    this.theme = theme
     this.body = new Container()
     this.body.addChild(new Text(theme.strong(theme.fg("brand", header)), 1, 0))
-    this.body.addChild(new Text(theme.fg("muted", "↑↓ select · Enter choose · Esc cancel"), 1, 0))
     this.list = new SelectList([...items], maxVisible, theme.select)
     this.list.onSelect = (item) => this.finish(item.value)
     this.list.onCancel = () => this.finish(null)
     this.body.addChild(this.list)
+    this.body.addChild(new Text(theme.fg("muted", "↑↓ select · Enter choose · Esc cancel"), 1, 0))
   }
 
   setOverlay(handle: OverlayHandle): void {
@@ -39,7 +43,13 @@ export class ModalList implements Component {
   }
 
   render(width: number): string[] {
-    return this.body.render(width)
+    const safeWidth = Math.max(1, width)
+    return this.body.render(safeWidth).map((line) => {
+      const clipped = truncateToWidth(line, safeWidth, "")
+      if (this.theme.name === "terminal") return clipped
+      const padded = `${clipped}${" ".repeat(Math.max(0, safeWidth - visibleWidth(clipped)))}`
+      return this.theme.bg("overlay", padded)
+    })
   }
 
   invalidate(): void {
@@ -71,7 +81,7 @@ export function showModalList(
 ): Promise<string | null> {
   return new Promise((resolve) => {
     const modal = new ModalList(header, items, maxVisible, resolve, theme)
-    const overlay = tui.showOverlay(modal, { width: "70%", maxHeight: maxVisible + 3 })
+    const overlay = tui.showOverlay(modal, { width: "70%", minWidth: 28, maxHeight: maxVisible + 3, margin: 1 })
     modal.setOverlay(overlay)
     overlay.focus()
   })

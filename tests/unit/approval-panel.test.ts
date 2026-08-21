@@ -1,0 +1,37 @@
+import { describe, expect, it } from "vitest"
+import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui"
+import type { ApprovalRequest } from "../../src/controller.ts"
+import { ApprovalPanel, approvalPanelSummary } from "../../src/ui/approval-panel.ts"
+import { createUiTheme } from "../../src/ui/theme.ts"
+
+const request: ApprovalRequest = {
+  toolCallId: "call-1",
+  optionIds: ["allow-once", "reject-once"],
+  name: "bash",
+  arguments: JSON.stringify({ command: "curl -H 'Authorization: sk-secret123' example.com" }),
+  stakes: "critical",
+}
+
+describe("ApprovalPanel", () => {
+  it("shows risk and target once while redacting credential-like values", () => {
+    const summary = stripTerminalSequences(approvalPanelSummary(request, 64, createUiTheme("terminal")))
+    expect(summary).toContain("CRITICAL")
+    expect(summary).toContain("bash")
+    expect(summary).toContain("[redacted]")
+    expect(summary).not.toContain("sk-secret123")
+    expect(summary.split("\n").every((line) => visibleWidth(line) <= 64)).toBe(true)
+  })
+
+  it("selects the offered decision and cancels on Escape", () => {
+    const results: Array<string | null> = []
+    const panel = new ApprovalPanel(request, (value) => results.push(value), createUiTheme("terminal"))
+    panel.handleInput("\u001b[B")
+    panel.handleInput("\r")
+    expect(results).toEqual(["reject-once"])
+
+    const cancelled: Array<string | null> = []
+    const second = new ApprovalPanel(request, (value) => cancelled.push(value), createUiTheme("terminal"))
+    second.handleInput("\u001b")
+    expect(cancelled).toEqual([null])
+  })
+})

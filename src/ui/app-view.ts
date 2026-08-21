@@ -20,7 +20,7 @@ import type { SessionInfo } from "../backend/session-log.ts"
 import type { MotionPreference, RunMode } from "../config.ts"
 import type { ThemePreference } from "../preferences.ts"
 import { sanitizeTerminalText, singleLine } from "../text.ts"
-import { createUiTheme, toolSummary, type UiTheme } from "./theme.ts"
+import { createUiTheme, type UiTheme } from "./theme.ts"
 import { ThemeCanvas } from "./theme-canvas.ts"
 import { showModalList } from "./modal-list.ts"
 import { createStreamingMarkdownView } from "./streaming-markdown.ts"
@@ -36,6 +36,9 @@ import {
 import { activityLineText, thinkingTraceText } from "./activity-line.ts"
 import { ToolCardComponent, toolCardComponent } from "./tool-card.ts"
 import { footerText, type FooterOptions } from "./footer.ts"
+import { showApprovalPanel } from "./approval-panel.ts"
+import { showModalPanel } from "./modal-panel.ts"
+import { sessionPanelText } from "./session-panel.ts"
 
 export interface ViewActions {
   onSubmit(text: string): void
@@ -216,7 +219,13 @@ export class AppView implements ControllerView {
 
   bind(actions: ViewActions): void {
     this.actions = actions
-    this.editor.onSubmit = (text) => actions.onSubmit(text)
+    this.editor.onSubmit = (text) => {
+      if (text.trim() === "/status") {
+        this.openSessionPanel()
+        return
+      }
+      actions.onSubmit(text)
+    }
     this.editor.onChange = (text) => actions.onDraft(text)
     this.removeInputListener = this.tui.addInputListener((data) => this.handleGlobalInput(data))
   }
@@ -311,15 +320,8 @@ export class AppView implements ControllerView {
   }
 
   async requestApproval(request: ApprovalRequest): Promise<PermissionDecision> {
-    const items = request.optionIds.map((optionId) => ({
-      value: optionId,
-      label: optionId.includes("allow")
-        ? this.theme.fg("success", `Allow · ${singleLine(request.name, 32)}`)
-        : this.theme.fg("error", `Reject · ${singleLine(request.name, 32)}`),
-      description: singleLine(toolSummary(request.name, request.arguments, 52), 52),
-    }))
-    if (items.length === 0) return { outcome: "cancelled" }
-    const selected = await showModalList(this.tui, `${request.stakes.toUpperCase()} approval`, items, Math.min(8, items.length), this.theme)
+    if (request.optionIds.length === 0) return { outcome: "cancelled" }
+    const selected = await showApprovalPanel(this.tui, request, this.theme)
     return selected === null ? { outcome: "cancelled" } : { outcome: "selected", optionId: selected }
   }
 
@@ -443,5 +445,26 @@ export class AppView implements ControllerView {
       elapsedSeconds: this.elapsedSeconds,
       theme: this.theme,
     }))
+  }
+
+  private openSessionPanel(): void {
+    if (!this.currentState || this.tui.hasOverlay()) return
+    const columns = Math.max(24, Math.floor(this.terminal.columns * 0.7) - 2)
+    showModalPanel(
+      this.tui,
+      "Session",
+      sessionPanelText({
+        state: this.currentState,
+        model: this.model,
+        cwd: this.cwd,
+        mode: this.mode,
+        motion: this.motion,
+        theme: this.theme,
+        columns,
+      }),
+      this.theme,
+      () => this.tui.requestRender(true),
+    )
+    this.tui.requestRender(true)
   }
 }
