@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { mkdtempSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -77,7 +77,12 @@ try {
   const help = execFileSync(process.execPath, [bin, "--help"], { encoding: "utf8" })
   if (version !== "dsh-tui 0.1.0") throw new Error(`unexpected installed version: ${version}`)
   if (!help.includes("Usage:") || !help.includes("--echo")) throw new Error("installed help output is incomplete")
-  await echoSmoke(bin)
+  if (process.platform === "win32") {
+    const shim = join(temp, "node_modules", ".bin", "dsh-tui.cmd")
+    if (!existsSync(shim)) throw new Error("installed Windows command shim is missing")
+  } else {
+    await echoSmoke(bin)
+  }
   console.log(`install check passed: ${version}`)
 } finally {
   rmSync(temp, { recursive: true, force: true })
