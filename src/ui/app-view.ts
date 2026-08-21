@@ -17,8 +17,10 @@ import type { ApprovalRequest, AppState, ControllerView, HistoryChoice, Transcri
 import type { PermissionDecision } from "../backend/acp-client.ts"
 import type { SessionInfo } from "../backend/session-log.ts"
 import type { MotionPreference, RunMode } from "../config.ts"
+import type { ThemePreference } from "../preferences.ts"
 import { sanitizeTerminalText, singleLine } from "../text.ts"
-import { c, markdownTheme, MARK_TOOL, MARK_TOOL_ERR, MARK_USER, selectTheme, STATUS_PREFIX, toolSummary } from "./theme.ts"
+import { createUiTheme, toolSummary, type UiTheme } from "./theme.ts"
+import { ThemeCanvas } from "./theme-canvas.ts"
 import { showModalList } from "./modal-list.ts"
 import { createStreamingMarkdownView } from "./streaming-markdown.ts"
 import { DeepPulseClock, ElapsedClock, deepPulseFrame, type DeepPulseTick } from "./deep-pulse.ts"
@@ -48,6 +50,7 @@ export function statusText(
   state: AppState,
   options: { mode: RunMode; model: string; notice?: string; elapsedSeconds?: number },
   columns: number,
+  theme: UiTheme = createUiTheme("terminal"),
 ): string {
   const activity = state.activity.kind === "boot" ? `starting ${state.activity.stage}`
     : state.activity.kind === "tool" ? `tool ${singleLine(state.activity.name, 12)}`
@@ -60,19 +63,19 @@ export function statusText(
         : state.phase === "closing" ? "closing"
           : state.phase === "ready" ? "ready" : activity
   const stableLabel = padToCellWidth(label, 16)
-  const colorPhase = (value: string): string => state.phase === "failed" ? c.red(value)
-    : state.phase === "ready" ? c.green(value)
-      : state.phase === "closing" ? c.dim(value) : c.yellow(value)
+  const colorPhase = (value: string): string => state.phase === "failed" ? theme.fg("error", value)
+    : state.phase === "ready" ? theme.fg("success", value)
+      : state.phase === "closing" ? theme.fg("muted", value) : theme.fg("warning", value)
   const phase = colorPhase(stableLabel)
   const tokens = state.usage.inputTokens || state.usage.outputTokens || state.usage.cacheReadTokens
-    ? c.dim(`${state.usage.inputTokens ?? 0}in/${state.usage.outputTokens ?? 0}out/${state.usage.cacheReadTokens ?? 0}cached`)
+    ? theme.fg("muted", `${state.usage.inputTokens ?? 0}in/${state.usage.outputTokens ?? 0}out/${state.usage.cacheReadTokens ?? 0}cached`)
     : ""
-  const cost = state.costUsd === null ? c.dim("—") : c.dim(`$${state.costUsd.toFixed(6)}`)
-  const session = state.sessionId ? c.dim(` · ${singleLine(state.sessionId, 8)}`) : ""
+  const cost = state.costUsd === null ? theme.fg("muted", "—") : theme.fg("muted", `$${state.costUsd.toFixed(6)}`)
+  const session = state.sessionId ? theme.fg("muted", ` · ${singleLine(state.sessionId, 8)}`) : ""
   const extra = options.notice || state.backendMessage || state.interruption || ""
   const width = Math.max(8, columns)
   const backendName = options.mode === "echo" ? "echo" : options.model
-  const styleBackend = (value: string): string => options.mode === "echo" ? c.dim(value) : c.blue(value)
+  const styleBackend = (value: string): string => options.mode === "echo" ? theme.fg("muted", value) : theme.fg("brand", value)
   const backend = styleBackend(singleLine(backendName, 28))
   const compactLabelWidth = Math.max(4, Math.min(16, width - 10))
   const compactLabel = padToCellWidth(label, compactLabelWidth)
@@ -83,17 +86,17 @@ export function statusText(
   const extraBudget = Math.max(2, width - visibleWidth(` ${extraLabel} ·  · `))
   const extraWidth = Math.max(1, Math.min(visibleWidth(extra), Math.floor(extraBudget / 2)))
   const extraBackendWidth = Math.max(1, extraBudget - extraWidth)
-  const compactExtra = `${STATUS_PREFIX} ${colorPhase(extraLabel)} · ${styleBackend(singleLine(backendName, extraBackendWidth))} · ${c.dim(singleLine(extra, extraWidth))}\x1b[0m`
+  const compactExtra = ` ${colorPhase(extraLabel)} · ${styleBackend(singleLine(backendName, extraBackendWidth))} · ${theme.fg("muted", singleLine(extra, extraWidth))}`
   const elapsed = options.elapsedSeconds === undefined || (state.phase !== "working" && state.phase !== "cancelling")
     ? ""
-    : c.dim(` · ${options.elapsedSeconds}s`)
+    : theme.fg("muted", ` · ${options.elapsedSeconds}s`)
   const full = extra
-    ? `${STATUS_PREFIX} dsh-tui · ${backend} · ${colorPhase(label)} · ${c.dim(singleLine(extra, Math.max(1, columns - 18)))}\x1b[0m`
-    : `${STATUS_PREFIX} dsh-tui · ${backend} · ${phase}${elapsed}${session} ${tokens} ${cost}\x1b[0m`
+    ? ` dsh-tui · ${backend} · ${colorPhase(label)} · ${theme.fg("muted", singleLine(extra, Math.max(1, columns - 18)))}`
+    : ` dsh-tui · ${backend} · ${phase}${elapsed}${session} ${tokens} ${cost}`
   const compact = extra
     ? compactExtra
-    : `${STATUS_PREFIX} ${colorPhase(compactLabel)} · ${compactBackend}\x1b[0m`
-  const phaseAndExtra = `${STATUS_PREFIX} ${colorPhase(label)}${extra ? ` · ${c.dim(singleLine(extra, Math.max(1, columns)))}` : ""}\x1b[0m`
+    : ` ${colorPhase(compactLabel)} · ${compactBackend}`
+  const phaseAndExtra = ` ${colorPhase(label)}${extra ? ` · ${theme.fg("muted", singleLine(extra, Math.max(1, columns)))}` : ""}`
   const best = [full, compact, phaseAndExtra].find((candidate) => visibleWidth(candidate) <= width) ?? phaseAndExtra
   return truncateToWidth(best, width, "…")
 }
@@ -103,11 +106,15 @@ function padToCellWidth(text: string, width: number): string {
   return `${clipped}${" ".repeat(Math.max(0, width - visibleWidth(clipped)))}`
 }
 
-export function toolResultText(item: Extract<TranscriptItem, { kind: "tool-result" }>, columns: number): string {
-  const prefix = item.isError ? MARK_TOOL_ERR : MARK_TOOL
+export function toolResultText(
+  item: Extract<TranscriptItem, { kind: "tool-result" }>,
+  columns: number,
+  theme: UiTheme = createUiTheme("terminal"),
+): string {
+  const prefix = item.isError ? `${theme.fg("error", "⚙✗")} ` : `${theme.fg("muted", "⚙")} `
   const textWidth = Math.max(1, columns - visibleWidth(prefix))
   const text = singleLine(item.text, textWidth)
-  return `${prefix}${item.isError ? c.red(text) : c.dim(text)}`
+  return `${prefix}${item.isError ? theme.fg("error", text) : theme.fg("muted", text)}`
 }
 
 class PaintAwareContainer extends Container {
@@ -165,10 +172,9 @@ export class AppView implements ControllerView {
   readonly tui: TUI = new TuiMainScreen(this.terminal)
   private readonly transcript = new PaintAwareContainer(() => this.actions?.onLiveTextPaint())
   private readonly committedTranscript = new Container()
-  private readonly partialAssistant = createStreamingMarkdownView({
-    markdown: (text) => new Markdown(text, 1, 0, markdownTheme),
-  })
+  private readonly partialAssistant: ReturnType<typeof createStreamingMarkdownView>
   private readonly scroller = new ScrollView(this.transcript, { follow: "end" })
+  private readonly canvas: ThemeCanvas
   private readonly header: AdaptiveText
   private readonly status = new Text("")
   private readonly editor: Editor
@@ -185,6 +191,7 @@ export class AppView implements ControllerView {
   private readonly cwd: string
   private readonly motion: MotionPreference
   private readonly tty: boolean
+  private readonly theme: UiTheme
   private readonly pulseClock: DeepPulseClock
   private readonly elapsedClock: ElapsedClock
   private readonly renderGate: LatestRenderGate<AppState>
@@ -197,6 +204,8 @@ export class AppView implements ControllerView {
     model: string
     cwd: string
     motion: MotionPreference
+    theme?: ThemePreference
+    color?: boolean
     tty?: boolean
     output?: DrainSource
   }) {
@@ -205,6 +214,13 @@ export class AppView implements ControllerView {
     this.cwd = options.cwd
     this.motion = options.motion
     this.tty = options.tty ?? process.stdout.isTTY === true
+    this.theme = createUiTheme(options.theme ?? "terminal", {
+      color: options.color ?? !("NO_COLOR" in process.env),
+    })
+    this.partialAssistant = createStreamingMarkdownView({
+      markdown: (text) => new Markdown(text, 1, 0, this.theme.markdown),
+    })
+    this.canvas = new ThemeCanvas(() => this.terminal.rows, this.theme)
     this.header = new AdaptiveText((width) => this.headerContent(width))
     this.pulseClock = new DeepPulseClock(this.motion, (tick) => {
       this.pulseTick = tick
@@ -219,16 +235,17 @@ export class AppView implements ControllerView {
     this.renderGate = new LatestRenderGate(options.output ?? process.stdout, (state) => this.renderState(state))
     this.tui.setClearOnShrink(true)
     const editorTheme: EditorTheme = {
-      borderColor: (text) => c.dim(text),
-      selectList: selectTheme,
+      borderColor: (text) => this.theme.editorBorder(this.currentState?.phase ?? "starting", true, text),
+      selectList: this.theme.select,
     }
     this.editor = new Editor(this.tui, editorTheme)
     this.transcript.addChild(this.committedTranscript)
     this.transcript.addChild(this.partialAssistant.element)
-    this.tui.addChild(this.header)
-    this.tui.addChild(this.scroller)
-    this.tui.addChild(this.editor)
-    this.tui.addChild(this.status)
+    this.canvas.addChild(this.header)
+    this.canvas.addChild(this.scroller)
+    this.canvas.addChild(this.editor)
+    this.canvas.addChild(this.status)
+    this.tui.addChild(this.canvas)
   }
 
   bind(actions: ViewActions): void {
@@ -247,6 +264,7 @@ export class AppView implements ControllerView {
   stop(): void {
     this.prepareShutdown()
     this.dismissOverlays()
+    if (this.theme.canvasBackground !== null) this.terminal.write("\x1b[0m")
     this.tui.stop()
   }
 
@@ -307,7 +325,7 @@ export class AppView implements ControllerView {
         const nextItem = state.transcript[index]
         const component = this.committedTranscript.children[index]
         if (previousItem !== nextItem && previousItem?.kind === "tool-call" && nextItem?.kind === "tool-result" && component instanceof Text) {
-          component.setText(toolResultText(nextItem, this.terminal.columns))
+          component.setText(toolResultText(nextItem, this.terminal.columns, this.theme))
         }
       }
       for (const item of state.transcript.slice(this.renderedTranscript.length)) this.addTranscriptItem(item)
@@ -329,42 +347,42 @@ export class AppView implements ControllerView {
     const items = request.optionIds.map((optionId) => ({
       value: optionId,
       label: optionId.includes("allow")
-        ? c.green(`Allow · ${singleLine(request.name, 32)}`)
-        : c.red(`Reject · ${singleLine(request.name, 32)}`),
+        ? this.theme.fg("success", `Allow · ${singleLine(request.name, 32)}`)
+        : this.theme.fg("error", `Reject · ${singleLine(request.name, 32)}`),
       description: singleLine(toolSummary(request.name, request.arguments, 52), 52),
     }))
     if (items.length === 0) return { outcome: "cancelled" }
-    const selected = await showModalList(this.tui, `${request.stakes.toUpperCase()} approval`, items, Math.min(8, items.length))
+    const selected = await showModalList(this.tui, `${request.stakes.toUpperCase()} approval`, items, Math.min(8, items.length), this.theme)
     return selected === null ? { outcome: "cancelled" } : { outcome: "selected", optionId: selected }
   }
 
   async chooseHistory(items: readonly SessionInfo[]): Promise<HistoryChoice> {
     const choices = [
-      { value: "__new__", label: c.green("+ New session"), description: "Create a real ACP session and clear the current transcript" },
+      { value: "__new__", label: this.theme.fg("success", "+ New session"), description: "Create a real ACP session and clear the current transcript" },
       ...items.slice(0, 20).map((item) => ({
         value: item.id,
         label: singleLine(`${item.title || item.firstUserMessage || item.id.slice(0, 8)}`, 48),
         description: singleLine(`${new Intl.DateTimeFormat(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(item.mtimeMs)} · read-only`, 60),
       })),
     ]
-    const selected = await showModalList(this.tui, "History", choices, Math.min(16, choices.length))
+    const selected = await showModalList(this.tui, "History", choices, Math.min(16, choices.length), this.theme)
     if (selected === null) return { kind: "cancel" }
     return selected === "__new__" ? { kind: "new" } : { kind: "session", id: selected }
   }
 
   private addTranscriptItem(item: TranscriptItem): void {
     if (item.kind === "user") {
-      this.committedTranscript.addChild(new Text(`${MARK_USER}${singleLine(item.text, Math.max(10, this.terminal.columns - 4))}`))
+      this.committedTranscript.addChild(new Text(`${this.theme.fg("brand", "›")} ${singleLine(item.text, Math.max(10, this.terminal.columns - 4))}`))
     } else if (item.kind === "assistant") {
-      this.committedTranscript.addChild(new Markdown(sanitizeTerminalText(item.text), 1, 0, markdownTheme))
+      this.committedTranscript.addChild(new Markdown(sanitizeTerminalText(item.text), 1, 0, this.theme.markdown))
     } else if (item.kind === "tool-call") {
-      this.committedTranscript.addChild(new Text(`${MARK_TOOL}${c.dim(toolSummary(item.name, item.arguments, this.terminal.columns))}`))
+      this.committedTranscript.addChild(new Text(`${this.theme.fg("muted", "⚙")} ${this.theme.fg("muted", toolSummary(item.name, item.arguments, this.terminal.columns))}`))
     } else if (item.kind === "tool-result") {
-      this.committedTranscript.addChild(new Text(toolResultText(item, this.terminal.columns)))
+      this.committedTranscript.addChild(new Text(toolResultText(item, this.terminal.columns, this.theme)))
     } else if (item.kind === "history-boundary") {
-      this.committedTranscript.addChild(new Text(c.dim(singleLine(item.text, Math.max(10, this.terminal.columns - 2)))))
+      this.committedTranscript.addChild(new Text(this.theme.fg("muted", singleLine(item.text, Math.max(10, this.terminal.columns - 2)))))
     } else {
-      this.committedTranscript.addChild(new Text(c.red(`⚠ ${singleLine(item.text, Math.max(10, this.terminal.columns - 4))}`)))
+      this.committedTranscript.addChild(new Text(this.theme.fg("error", `⚠ ${singleLine(item.text, Math.max(10, this.terminal.columns - 4))}`)))
     }
   }
 
@@ -434,6 +452,6 @@ export class AppView implements ControllerView {
       model: this.model,
       notice: this.notice,
       elapsedSeconds: this.elapsedSeconds,
-    }, this.terminal.columns))
+    }, this.terminal.columns, this.theme))
   }
 }

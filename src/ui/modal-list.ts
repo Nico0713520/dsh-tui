@@ -8,7 +8,7 @@ import {
   type TUI,
 } from "@earendil-works/pi-tui"
 import { matchesKey } from "@earendil-works/pi-tui"
-import { c, selectTheme } from "./theme.ts"
+import { createUiTheme, type UiTheme } from "./theme.ts"
 
 export class ModalList implements Component {
   private readonly body: Container
@@ -22,12 +22,13 @@ export class ModalList implements Component {
     items: readonly SelectItem[],
     maxVisible: number,
     onResult: (value: string | null) => void,
+    theme: UiTheme = createUiTheme("terminal"),
   ) {
     this.onResult = onResult
     this.body = new Container()
-    this.body.addChild(new Text(c.bold(c.cyan(header)), 1, 0))
-    this.body.addChild(new Text(c.dim("↑↓ select · Enter choose · Esc cancel"), 1, 0))
-    this.list = new SelectList([...items], maxVisible, selectTheme)
+    this.body.addChild(new Text(theme.strong(theme.fg("brand", header)), 1, 0))
+    this.body.addChild(new Text(theme.fg("muted", "↑↓ select · Enter choose · Esc cancel"), 1, 0))
+    this.list = new SelectList([...items], maxVisible, theme.select)
     this.list.onSelect = (item) => this.finish(item.value)
     this.list.onCancel = () => this.finish(null)
     this.body.addChild(this.list)
@@ -66,9 +67,10 @@ export function showModalList(
   header: string,
   items: readonly SelectItem[],
   maxVisible: number,
+  theme: UiTheme = createUiTheme("terminal"),
 ): Promise<string | null> {
   return new Promise((resolve) => {
-    const modal = new ModalList(header, items, maxVisible, resolve)
+    const modal = new ModalList(header, items, maxVisible, resolve, theme)
     const overlay = tui.showOverlay(modal, { width: "70%", maxHeight: maxVisible + 3 })
     modal.setOverlay(overlay)
     overlay.focus()

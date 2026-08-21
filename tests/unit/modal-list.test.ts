@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { ModalList } from "../../src/ui/modal-list.ts"
+import { createUiTheme } from "../../src/ui/theme.ts"
 
 describe("ModalList", () => {
   it("resolves cancellation on Escape exactly once", () => {
@@ -26,5 +27,13 @@ describe("ModalList", () => {
 
     expect(results).toEqual(["two"])
     expect(modal.render(40).length).toBeGreaterThan(0)
+  })
+
+  it("uses the selected semantic theme for modal chrome", () => {
+    const modal = new ModalList("History", [
+      { value: "one", label: "One" },
+    ], 4, () => {}, createUiTheme("deepseek"))
+
+    expect(modal.render(40).join("\n")).toContain("38;2;77;107;254")
   })
 })
