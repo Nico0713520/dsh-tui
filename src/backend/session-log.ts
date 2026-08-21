@@ -203,10 +203,14 @@ export class SessionLogReader {
     }
     if (generation !== this.generation || !this.fileHandle) return
     let metadata = await this.fileHandle.stat()
+    // Fast path: nothing appended and no stamp change means no path identity
+    // check is needed; one stat per idle poll instead of three.
+    const idleStamp = `${metadata.mtimeMs}:${metadata.ctimeMs}`
+    if (metadata.size === this.offset && this.lastMetadataStamp === idleStamp) return
     const pathMetadata = await stat(filePath)
     const handleIdentity = `${metadata.dev}:${metadata.ino}`
     const pathIdentity = `${pathMetadata.dev}:${pathMetadata.ino}`
-    const metadataStamp = `${metadata.mtimeMs}:${metadata.ctimeMs}`
+    const metadataStamp = idleStamp
     const replaced = handleIdentity !== pathIdentity
       || metadata.size < this.offset
       || (metadata.size === this.offset && this.lastMetadataStamp !== null && metadataStamp !== this.lastMetadataStamp)
@@ -299,10 +303,32 @@ function parseEvent(record: unknown, callNames: Map<string, { name: string; argu
 interface ReadRecordsResult {
   records: RecordValue[]
   malformed: number
+  truncated: boolean
 }
 
-async function readRecords(filePath: string): Promise<ReadRecordsResult> {
-  const content = await readFile(filePath, "utf8")
+/** Bytes read from a history file when listing sessions; enough for title and
+ * first user message without loading multi-megabyte transcripts. */
+export const HISTORY_LIST_READ_LIMIT = 64 * 1024
+/** Maximum number of session directories scanned per history listing. */
+export const HISTORY_LIST_ENTRY_LIMIT = 100
+
+async function readRecords(filePath: string, byteLimit?: number): Promise<ReadRecordsResult> {
+  let content: string
+  let truncated = false
+  if (byteLimit === undefined) {
+    content = await readFile(filePath, "utf8")
+  } else {
+    const handle = await open(filePath, "r")
+    try {
+      const buffer = Buffer.allocUnsafe(byteLimit)
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
+      const metadata = await handle.stat()
+      truncated = bytesRead < metadata.size
+      content = buffer.subarray(0, bytesRead).toString("utf8")
+    } finally {
+      await handle.close()
+    }
+  }
   const records: RecordValue[] = []
   let malformed = 0
   for (const line of content.split("\n")) {
@@ -315,7 +341,7 @@ async function readRecords(filePath: string): Promise<ReadRecordsResult> {
       malformed += 1
     }
   }
-  return { records, malformed }
+  return { records, malformed, truncated }
 }
 
 function firstText(value: unknown): string {
@@ -338,15 +364,17 @@ export async function listHistory(persistRoot: string, cwd: string): Promise<Ses
     if (isMissing(error)) return []
     throw error
   }
-  const sessions = await Promise.all(entries.filter((entry) => entry.isDirectory()).map(async (entry) => {
+  const directories = entries.filter((entry) => entry.isDirectory())
+  if (directories.length > HISTORY_LIST_ENTRY_LIMIT) directories.length = HISTORY_LIST_ENTRY_LIMIT
+  const sessions = await Promise.all(directories.map(async (entry) => {
     const filePath = join(root, entry.name, "session.jsonl")
     try {
       const metadata = await stat(filePath)
-      const { records, malformed } = await readRecords(filePath)
+      const { records } = await readRecords(filePath, HISTORY_LIST_READ_LIMIT)
       const titleRecord = records.find((record) => record.type === "session/title")
       const title = isRecord(titleRecord?.data) && typeof titleRecord.data.title === "string"
         ? titleRecord.data.title
-        : malformed > 0 ? "[malformed history]" : ""
+        : ""
       const userRecord = records.find((record) => record.type === "user/message" && !isToolMessage(record))
       return {
         id: entry.name,
