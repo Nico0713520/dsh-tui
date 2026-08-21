@@ -13,8 +13,10 @@ DeepSeek API documentation site:
 for terminal inline-image protocols. Display scaling preserves aspect ratio.
 
 The text-terminal solid quadrant-block fallback in `src/ui/brand-logo.ts` is
-sampled from the same silhouette at a fixed 32 × 12 or 24 × 10 subpixel grid.
-It is a rendering fallback, not a replacement logo.
+sampled from the same silhouette at a fixed 36 × 12 or 24 × 10 subpixel grid.
+The full sample is 18 × 6 terminal cells. macOS Terminal uses this fallback
+because it does not implement the Kitty or iTerm2 inline-image protocols. It is
+a rendering fallback, not a replacement logo.
 Do not redraw, recolor, crop, distort, or animate the official whale.
 
 DeepSeek and its whale mark belong to their respective owner. This repository

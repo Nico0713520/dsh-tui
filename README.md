@@ -63,7 +63,7 @@ The approval overlay only accepts an option supplied by ACP. History replay is m
 
 ## Live experience
 
-dsh-tui starts the backend and the non-blocking Quiet Signal entrance together. A fresh session shows the complete responsive welcome surface; the first submitted prompt folds it into a one-line identity row that naturally scrolls away with the conversation. You can type immediately: one prompt submitted during startup stays editable and is sent exactly once when the ACP session is ready.
+dsh-tui starts the backend and the non-blocking Quiet Signal entrance together. A fresh session shows the complete responsive welcome surface. The first prompt and every later message are appended below it, so the unchanged card leaves the viewport only through natural conversation scrolling. You can type immediately: one prompt submitted during startup stays editable and is sent exactly once when the ACP session is ready.
 
 During a turn, the status distinguishes thinking, responding, tool activity, and approval. Transient activity and text arrive over an optional bounded event pipe, while ACP remains authoritative for committed replies and prompt settlement. A content-free control barrier drains the event pipe before the next prompt, so delayed records from an interrupted turn cannot appear in the new turn. If either live pipe is unavailable or malformed, the client falls back to ACP and session JSONL without failing the prompt. Reasoning text is never displayed or copied into diagnostics.
 
@@ -81,7 +81,7 @@ dsh-tui theme terminal
 
 The saved preference is resolved after `--theme terminal|deepseek` and `DSH_TUI_THEME`, so a launch-specific override never rewrites the saved setting. `NO_COLOR` disables decorative color while keeping layout and the explicitly requested motion policy.
 
-The welcome uses a calm framed split layout: a centered DeepSeek identity area on the left and two short getting-started sections on the right. Session IDs and safety diagnostics stay out of the hero and remain available through `/status`. The unchanged official `#4D6BFE` whale is rendered as a transparent inline image in Kitty/iTerm2 and as a fixed solid block sample of the same silhouette in text terminals; terminals below 34 columns use text-only identity. The whale itself is never animated. See [third-party notices](THIRD_PARTY_NOTICES.md).
+The welcome uses a calm framed split layout: a centered DeepSeek identity area on the left and two short getting-started sections on the right. Session IDs and safety diagnostics stay out of the hero and remain available through `/status`. The unchanged official `#4D6BFE` whale is rendered as a transparent inline image in Kitty/iTerm2 and as a fixed 18×6 solid block sample of the same silhouette in wide text terminals; macOS Terminal uses this solid fallback because it does not implement those inline-image protocols. Terminals below 34 columns use text-only identity. The whale itself is never animated. See [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Keys and options
 
