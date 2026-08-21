@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest"
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises"
-import { join } from "node:path"
+import { join, dirname } from "node:path"
 import { tmpdir } from "node:os"
 import {
   loadUiPreferences,
@@ -22,6 +22,18 @@ describe("UI preferences", () => {
       .toBe("/Users/test/Library/Application Support/dsh-tui/settings.json")
     expect(preferenceFilePath({ APPDATA: "C:\\Users\\test\\AppData\\Roaming" }, "C:\\Users\\test", "win32"))
       .toBe("C:\\Users\\test\\AppData\\Roaming\\dsh-tui\\settings.json")
+  })
+
+  it("tolerates a UTF-8 BOM written by external editors or PowerShell redirects", async () => {
+    const home = await mkdtemp(join(tmpdir(), "dsh-tui-preferences-bom-"))
+    roots.push(home)
+    const options = { env: {}, home, platform: process.platform }
+    const path = preferenceFilePath({}, home, process.platform)
+    const { mkdir, writeFile } = await import("node:fs/promises")
+    await mkdir(dirname(path), { recursive: true })
+    await writeFile(path, "\uFEFF{\"theme\":\"deepseek\"}", "utf8")
+
+    expect(loadUiPreferences(options)).toEqual({ theme: "deepseek" })
   })
 
   it("persists a validated theme atomically with private POSIX permissions where supported", async () => {

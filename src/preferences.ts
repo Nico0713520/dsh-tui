@@ -44,6 +44,10 @@ export function loadUiPreferences(options: PreferenceOptions = {}): UiPreference
     throw new Error(`Unable to read UI settings at ${path}`, { cause: error })
   }
 
+  // Tolerate a UTF-8 BOM left by external editors or PowerShell redirects so a
+  // hand-edited settings file never blocks startup.
+  if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1)
+
   try {
     const value: unknown = JSON.parse(raw)
     if (typeof value !== "object" || value === null || !isThemePreference((value as { theme?: unknown }).theme)) {
