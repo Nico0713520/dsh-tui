@@ -57,6 +57,7 @@ export function welcomePanelText(options: WelcomePanelOptions): string {
       fit(identity, width),
       fit(`${options.theme.fg("muted", "workspace")}  ${safe(options.cwd, width - 12)}`, width),
       fit(`${options.theme.fg("muted", "session")}    ${safe(options.sessionId ?? "creating…", 24)}  ${options.theme.fg("muted", "· workspace-write · approval ask")}`, width),
+      fit(`${options.theme.fg("accent", "Enter")} send  ${options.theme.fg("muted", "·")}  ${options.theme.fg("accent", "Esc")} stop  ${options.theme.fg("muted", "·")}  ${options.theme.fg("accent", "Ctrl+R")} history  ${options.theme.fg("muted", "·")}  ${options.theme.fg("accent", "Ctrl+O")} tools  ${options.theme.fg("muted", "· /status")}`, width),
     ].join("\n")
   }
   if (width >= 60) {

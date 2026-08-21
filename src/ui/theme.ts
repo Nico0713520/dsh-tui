@@ -131,7 +131,10 @@ export function createUiTheme(
     editorBorder: (phase, focused, text) => {
       if (phase === "failed") return fg("error", text)
       if (phase === "cancelling") return fg("warning", text)
-      return fg(focused ? "borderFocus" : "border", text)
+      if (!focused) return fg("border", text)
+      if (phase === "starting") return fg("warning", text)
+      if (phase === "working") return fg("accent", text)
+      return fg("borderFocus", text)
     },
   }
 }

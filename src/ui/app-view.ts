@@ -35,6 +35,7 @@ import {
 } from "./transcript-components.ts"
 import { activityLineText, thinkingTraceText } from "./activity-line.ts"
 import { ToolCardComponent, toolCardComponent } from "./tool-card.ts"
+import { footerText, type FooterOptions } from "./footer.ts"
 
 export interface ViewActions {
   onSubmit(text: string): void
@@ -57,62 +58,11 @@ export function headerText(columns: number, brand = "dsh-tui"): string {
 
 export function statusText(
   state: AppState,
-  options: { mode: RunMode; model: string; notice?: string; elapsedSeconds?: number },
+  options: FooterOptions,
   columns: number,
   theme: UiTheme = createUiTheme("terminal"),
 ): string {
-  const activity = state.activity.kind === "boot" ? `starting ${state.activity.stage}`
-    : state.activity.kind === "tool" ? `tool ${singleLine(state.activity.name, 12)}`
-      : state.activity.kind === "approval" ? `approval ${singleLine(state.activity.name, 9)}`
-        : state.activity.kind
-  const label = state.queuedPrompt !== null ? "queued"
-    : state.phase === "starting" ? (state.activity.kind === "boot" ? `starting ${state.activity.stage}` : "starting")
-      : state.phase === "cancelling" ? "cancelling"
-      : state.phase === "failed" ? "failed"
-        : state.phase === "closing" ? "closing"
-          : state.phase === "ready" ? "ready" : activity
-  const stableLabel = padToCellWidth(label, 16)
-  const colorPhase = (value: string): string => state.phase === "failed" ? theme.fg("error", value)
-    : state.phase === "ready" ? theme.fg("success", value)
-      : state.phase === "closing" ? theme.fg("muted", value) : theme.fg("warning", value)
-  const phase = colorPhase(stableLabel)
-  const tokens = state.usage.inputTokens || state.usage.outputTokens || state.usage.cacheReadTokens
-    ? theme.fg("muted", `${state.usage.inputTokens ?? 0}in/${state.usage.outputTokens ?? 0}out/${state.usage.cacheReadTokens ?? 0}cached`)
-    : ""
-  const cost = state.costUsd === null ? theme.fg("muted", "—") : theme.fg("muted", `$${state.costUsd.toFixed(6)}`)
-  const session = state.sessionId ? theme.fg("muted", ` · ${singleLine(state.sessionId, 8)}`) : ""
-  const extra = options.notice || state.backendMessage || state.interruption || ""
-  const width = Math.max(8, columns)
-  const backendName = options.mode === "echo" ? "echo" : options.model
-  const styleBackend = (value: string): string => options.mode === "echo" ? theme.fg("muted", value) : theme.fg("brand", value)
-  const backend = styleBackend(singleLine(backendName, 28))
-  const compactLabelWidth = Math.max(4, Math.min(16, width - 10))
-  const compactLabel = padToCellWidth(label, compactLabelWidth)
-  const compactBackendWidth = Math.max(1, width - visibleWidth(` ${compactLabel} · `))
-  const compactBackend = styleBackend(singleLine(backendName, compactBackendWidth))
-  const extraLabelWidth = Math.max(4, Math.min(10, width - 16))
-  const extraLabel = padToCellWidth(label, extraLabelWidth)
-  const extraBudget = Math.max(2, width - visibleWidth(` ${extraLabel} ·  · `))
-  const extraWidth = Math.max(1, Math.min(visibleWidth(extra), Math.floor(extraBudget / 2)))
-  const extraBackendWidth = Math.max(1, extraBudget - extraWidth)
-  const compactExtra = ` ${colorPhase(extraLabel)} · ${styleBackend(singleLine(backendName, extraBackendWidth))} · ${theme.fg("muted", singleLine(extra, extraWidth))}`
-  const elapsed = options.elapsedSeconds === undefined || (state.phase !== "working" && state.phase !== "cancelling")
-    ? ""
-    : theme.fg("muted", ` · ${options.elapsedSeconds}s`)
-  const full = extra
-    ? ` dsh-tui · ${backend} · ${colorPhase(label)} · ${theme.fg("muted", singleLine(extra, Math.max(1, columns - 18)))}`
-    : ` dsh-tui · ${backend} · ${phase}${elapsed}${session} ${tokens} ${cost}`
-  const compact = extra
-    ? compactExtra
-    : ` ${colorPhase(compactLabel)} · ${compactBackend}`
-  const phaseAndExtra = ` ${colorPhase(label)}${extra ? ` · ${theme.fg("muted", singleLine(extra, Math.max(1, columns)))}` : ""}`
-  const best = [full, compact, phaseAndExtra].find((candidate) => visibleWidth(candidate) <= width) ?? phaseAndExtra
-  return truncateToWidth(best, width, "…")
-}
-
-function padToCellWidth(text: string, width: number): string {
-  const clipped = singleLine(text, width)
-  return `${clipped}${" ".repeat(Math.max(0, width - visibleWidth(clipped)))}`
+  return footerText(state, options, columns, theme)
 }
 
 export function toolResultText(
@@ -243,7 +193,14 @@ export class AppView implements ControllerView {
     this.renderGate = new LatestRenderGate(options.output ?? process.stdout, (state) => this.renderState(state))
     this.tui.setClearOnShrink(true)
     const editorTheme: EditorTheme = {
-      borderColor: (text) => this.theme.editorBorder(this.currentState?.phase ?? "starting", true, text),
+      borderColor: (text) => {
+        if (this.currentState?.activeOverlay === "approval") return this.theme.fg("warning", text)
+        return this.theme.editorBorder(
+          this.currentState?.phase ?? "starting",
+          this.currentState?.activeOverlay === null,
+          text,
+        )
+      },
       selectList: this.theme.select,
     }
     this.editor = new Editor(this.tui, editorTheme)
@@ -429,6 +386,14 @@ export class AppView implements ControllerView {
       this.notice = this.toolDetailsExpanded ? "tool details expanded" : "tool details compact"
       this.updateStatus()
       this.tui.requestRender(true)
+      if (this.noticeTimer !== null) clearTimeout(this.noticeTimer)
+      this.noticeTimer = setTimeout(() => {
+        this.notice = ""
+        this.noticeTimer = null
+        this.updateStatus()
+        this.tui.requestRender()
+      }, 1_200)
+      this.noticeTimer.unref?.()
       return { consume: true }
     }
     if (matchesKey(data, "ctrl+r")) {
@@ -464,6 +429,7 @@ export class AppView implements ControllerView {
     this.status.setText(statusText(this.currentState, {
       mode: this.mode,
       model: this.model,
+      cwd: this.cwd,
       notice: this.notice,
       elapsedSeconds: this.elapsedSeconds,
     }, this.terminal.columns, this.theme))
