@@ -26,7 +26,7 @@ import { showModalList } from "./modal-list.ts"
 import { createStreamingMarkdownView } from "./streaming-markdown.ts"
 import { ElapsedClock, VisualClock, type DeepPulseTick } from "./deep-pulse.ts"
 import { LatestRenderGate, type DrainSource } from "./render-backpressure.ts"
-import { shouldExpandWelcome, WelcomeTranscriptComponent } from "./welcome-panel.ts"
+import { WelcomeTranscriptComponent } from "./welcome-panel.ts"
 import {
   renderAssistantMessage,
   renderDiagnostic,
@@ -165,7 +165,6 @@ export class AppView implements ControllerView {
     })
     this.canvas = new ThemeCanvas(() => this.terminal.rows, this.theme)
     this.welcome = new WelcomeTranscriptComponent({
-      expanded: true,
       capabilities: options.capabilities ?? getCapabilities(),
       assetPath: options.brandAssetPath,
       columns: this.terminal.columns,
@@ -427,7 +426,6 @@ export class AppView implements ControllerView {
   private updateWelcome(): void {
     const state = this.currentState
     this.welcome.update({
-      expanded: state ? shouldExpandWelcome(state) : true,
       columns: this.terminal.columns,
       tick: this.pulseTick,
       motion: this.motion,

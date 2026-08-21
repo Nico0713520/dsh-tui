@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui"
-import type { AppState } from "../../src/controller.ts"
-import {
-  compactIdentityText,
-  shouldExpandWelcome,
-  WelcomeTranscriptComponent,
-} from "../../src/ui/welcome-panel.ts"
+import { WelcomeTranscriptComponent } from "../../src/ui/welcome-panel.ts"
 import { createUiTheme } from "../../src/ui/theme.ts"
 
 const assetPath = new URL("../../assets/brand/deepseek-whale.png.base64", import.meta.url)
@@ -34,7 +29,6 @@ describe("welcome presentation", () => {
     const lines = new WelcomeTranscriptComponent({
       ...base,
       columns,
-      expanded: true,
       capabilities: textCapabilities,
       assetPath,
     }).render(columns)
@@ -47,7 +41,6 @@ describe("welcome presentation", () => {
     const text = stripTerminalSequences(new WelcomeTranscriptComponent({
       ...base,
       columns: 120,
-      expanded: true,
       capabilities: textCapabilities,
       assetPath,
     }).render(120).join("\n"))
@@ -62,23 +55,19 @@ describe("welcome presentation", () => {
     expect(text).not.toContain("approval ask")
   })
 
-  it("folds into a single compact identity row after the first user message", () => {
-    const text = compactIdentityText({
-      columns: 48,
-      model: base.model,
-      phase: base.phase,
-      theme: base.theme,
+  it("keeps the complete card when the session starts working", () => {
+    const component = new WelcomeTranscriptComponent({
+      ...base,
+      columns: 120,
+      capabilities: textCapabilities,
+      assetPath,
     })
 
-    expect(stripTerminalSequences(text)).toContain("DeepSeek Harness")
-    expect(stripTerminalSequences(text)).toContain("deepseek")
-    expect(visibleWidth(text)).toBeLessThanOrEqual(48)
-    expect(text).not.toContain("\n")
-  })
+    component.update({ ...base, columns: 120, phase: "working" })
+    const text = stripTerminalSequences(component.render(120).join("\n"))
 
-  it("expands only before a user prompt exists", () => {
-    const state = { transcript: [] } satisfies Pick<AppState, "transcript">
-    expect(shouldExpandWelcome(state)).toBe(true)
-    expect(shouldExpandWelcome({ transcript: [{ kind: "user", text: "hello" }] })).toBe(false)
+    expect(text).toContain("Welcome back!")
+    expect(text).toContain("Tips for getting started")
+    expect(text).toContain("Quick actions")
   })
 })

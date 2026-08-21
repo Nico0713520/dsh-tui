@@ -1,10 +1,8 @@
 import {
-  Text,
-  truncateToWidth,
   type Component,
   type TerminalCapabilities,
 } from "@earendil-works/pi-tui"
-import type { AppPhase, AppState } from "../controller.ts"
+import type { AppPhase } from "../controller.ts"
 import type { MotionPreference } from "../config.ts"
 import { brandLogoMode, createBrandLogo } from "./brand-logo.ts"
 import type { DeepPulseTick } from "./deep-pulse.ts"
@@ -23,41 +21,13 @@ export interface WelcomePanelOptions {
   theme: UiTheme
 }
 
-export interface CompactIdentityOptions {
-  columns: number
-  model: string
-  phase: AppPhase
-  theme: UiTheme
-}
-
-function fit(text: string, columns: number): string {
-  if (columns <= 0) return ""
-  return truncateToWidth(text, columns, "…")
-}
-
-function phaseText(phase: AppPhase, theme: UiTheme): string {
-  if (phase === "ready") return theme.fg("success", "ready")
-  if (phase === "failed") return theme.fg("error", "failed")
-  if (phase === "closing") return theme.fg("muted", "closing")
-  return theme.fg("warning", phase)
-}
-
-export function compactIdentityText(options: CompactIdentityOptions): string {
-  const width = Math.max(1, options.columns)
-  if (width < 22) return fit(`dsh-tui · ${options.phase}`, width)
-  const full = `${options.theme.strong(options.theme.fg("brand", "DeepSeek Harness"))} ${options.theme.fg("muted", "·")} ${options.theme.fg("brand", options.model)} ${options.theme.fg("muted", "·")} ${phaseText(options.phase, options.theme)}`
-  const medium = `${options.theme.strong(options.theme.fg("brand", "DeepSeek Harness"))} ${options.theme.fg("muted", "·")} ${options.theme.fg("brand", options.model)}`
-  return fit(width >= 58 ? full : medium, width)
-}
-
 export class WelcomeTranscriptComponent implements Component {
-  private options: WelcomePanelOptions & { expanded: boolean }
+  private options: WelcomePanelOptions
   private readonly capabilities: TerminalCapabilities
   private readonly assetPath: string | URL
   private readonly logoCache = new Map<string, Component | null>()
 
   constructor(options: WelcomePanelOptions & {
-    expanded: boolean
     capabilities: TerminalCapabilities
     assetPath: string | URL
   }) {
@@ -67,20 +37,12 @@ export class WelcomeTranscriptComponent implements Component {
     this.assetPath = assetPath
   }
 
-  update(options: WelcomePanelOptions & { expanded: boolean }): void {
+  update(options: WelcomePanelOptions): void {
     this.options = options
   }
 
   render(width: number): string[] {
     const columns = Math.max(1, width)
-    if (!this.options.expanded) {
-      return new Text(compactIdentityText({
-        columns,
-        model: this.options.model,
-        phase: this.options.phase,
-        theme: this.options.theme,
-      })).render(columns)
-    }
     return new WelcomeCard({
       columns,
       logo: columns >= 48 ? this.logo(columns) : null,
@@ -108,8 +70,4 @@ export class WelcomeTranscriptComponent implements Component {
     }
     return this.logoCache.get(key) ?? null
   }
-}
-
-export function shouldExpandWelcome(state: Pick<AppState, "transcript">): boolean {
-  return !state.transcript.some((item) => item.kind === "user")
 }

@@ -22,7 +22,7 @@ import {
   renderUserMessage,
 } from "../../src/ui/transcript-components.ts"
 import { toolCardComponent } from "../../src/ui/tool-card.ts"
-import { WelcomeTranscriptComponent, compactIdentityText } from "../../src/ui/welcome-panel.ts"
+import { WelcomeTranscriptComponent } from "../../src/ui/welcome-panel.ts"
 
 const assetPath = new URL("../../assets/brand/deepseek-whale.png.base64", import.meta.url)
 const widths = [120, 96, 80, 60, 48, 32] as const
@@ -79,7 +79,6 @@ function welcome(width: number, capabilities: TerminalCapabilities, themeName: "
   const theme = createUiTheme(themeName)
   setCapabilities(capabilities)
   return new WelcomeTranscriptComponent({
-    expanded: true,
     capabilities,
     assetPath,
     columns: width,
@@ -113,7 +112,6 @@ describe("complete visual layout matrix", () => {
       for (const component of components) expectBounded(component.render(width), width)
 
       const textRows = [
-        compactIdentityText({ columns: width, model: "deepseek-v4-flash", phase: "ready", theme }),
         activityLineText(state.activity, { columns: width, frame: 0, elapsedSeconds: 3, theme }),
         footerText(state, { mode: "acp", model: "deepseek-v4-flash", cwd: "/workspace/项目", elapsedSeconds: 3 }, width, theme),
         approvalPanelSummary({

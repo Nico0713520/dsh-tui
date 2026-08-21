@@ -3,7 +3,7 @@ import { visibleWidth } from "@earendil-works/pi-tui"
 import { spawnTui } from "./pty-harness.ts"
 
 describe("real Echo TUI", () => {
-  it("shows the complete welcome immediately and folds it after the first prompt", async () => {
+  it("shows the complete welcome immediately and keeps it above the first exchange", async () => {
     const terminal = spawnTui(["src/main.ts", "--echo", "--motion", "off"], { cols: 120, rows: 30 })
     try {
       await terminal.waitForText("Welcome back!")
@@ -21,9 +21,9 @@ describe("real Echo TUI", () => {
       await terminal.waitForText("端。", 2_000, promptStart)
       await terminal.waitForText("ready", 2_000, promptStart)
       await new Promise((resolve) => setTimeout(resolve, 100))
-      expect(terminal.screenText()).not.toContain("Welcome back!")
-      expect(terminal.screenText()).not.toContain("▗████████▙▖")
-      expect(terminal.screenText()).toContain("DeepSeek Harness")
+      expect(terminal.screenText()).toContain("Welcome back!")
+      expect(terminal.screenText()).toContain("▗████████▙▖")
+      expect(terminal.screenText()).toContain("[echo] hello")
 
       const statusStart = terminal.rawLength()
       terminal.write("/status\r")
@@ -67,7 +67,7 @@ describe("real Echo TUI", () => {
         .map((line) => visibleWidth(line))
         .filter((width) => width > 32)
       expect(veryNarrowOverflow).toEqual([])
-      expect(terminal.screenText()).toContain("DeepSeek Harness")
+      expect(terminal.screenText()).toContain("dsh-tui · ready")
       terminal.resize(48, 16)
       await new Promise((resolve) => setTimeout(resolve, 100))
 
