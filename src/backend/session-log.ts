@@ -149,9 +149,14 @@ export class SessionLogReader {
   }
 
   watch(options: SessionLogWatchOptions): void {
+    const filePath = resolveSessionLogPath(options.persistRoot, options.cwd, options.sessionId)
+    if (this.options && this.filePath === filePath) {
+      this.options = options
+      return
+    }
     this.stop()
     this.options = options
-    this.filePath = resolveSessionLogPath(options.persistRoot, options.cwd, options.sessionId)
+    this.filePath = filePath
     const generation = this.generation
     void this.tick(generation)
   }
