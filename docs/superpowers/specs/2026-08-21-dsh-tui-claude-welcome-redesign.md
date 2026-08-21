@@ -1,6 +1,6 @@
 # dsh-tui Claude-style welcome redesign
 
-Date: 2026-08-21  
+Date: 2026-08-21
 Status: approved direction, ready for implementation planning
 
 ## Objective

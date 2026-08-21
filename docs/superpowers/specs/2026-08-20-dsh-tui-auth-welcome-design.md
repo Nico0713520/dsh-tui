@@ -106,4 +106,3 @@ Full motion paints the static first frame immediately, then scans a highlight ac
 - Welcome lifecycle: PTY first frame, immediate input, first-submit collapse, resize, and clean exit.
 - Composition: both platform files mount the local credential provider before the LLM.
 - Packaging: dependency, tarball, and clean-install checks include the provider and welcome module.
-

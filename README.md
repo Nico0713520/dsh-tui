@@ -1,25 +1,34 @@
 # dsh-tui
 
-![dsh-tui ACP demo](https://raw.githubusercontent.com/Nico0713520/dsh-tui/main/assets/demo.gif)
+[简体中文](README.zh-CN.md)
 
-![dsh-tui approval view](https://raw.githubusercontent.com/Nico0713520/dsh-tui/main/assets/screenshot.png)
+![dsh-tui welcome and conversation view](https://raw.githubusercontent.com/Nico0713520/dsh-tui/master/assets/screenshot.png)
 
-An independent community TUI for DeepSeek Harness ACP: streaming Markdown, semantic tool cards, explicit permission approval, read-only history, and honest token/cost status.
+A lightweight, calm TUI for DeepSeek Harness. It keeps the original DSH packages and ACP flow, then adds a comfortable terminal surface for streaming replies, tool activity, explicit approvals, read-only history, and honest usage status.
+
+- **Original Harness flow:** built directly on the DeepSeek Harness composition instead of replacing the agent backend.
+- **Lightweight interaction:** responsive input, bounded rendering work, and graceful fallback when optional live event pipes are unavailable.
+- **Comfortable by default:** a restrained welcome surface, natural conversation scrolling, and terminal-native or DeepSeek blue themes.
 
 DeepSeek and the official blue whale mark belong to their respective owner. This project is not developed, endorsed, sponsored, or published by DeepSeek.
 
 [![CI](https://github.com/Nico0713520/dsh-tui/actions/workflows/ci.yml/badge.svg)](https://github.com/Nico0713520/dsh-tui/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/%40nico0713520%2Fdsh-tui?label=npm)](https://www.npmjs.com/package/@nico0713520/dsh-tui)
 [![Node.js](https://img.shields.io/badge/node-22.19%2B%20%7C%2024%2B-339933)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ## Install and start
 
 ~~~bash
-npm install -g @nico0713520/dsh-tui
+git clone https://github.com/Nico0713520/dsh-tui.git
+cd dsh-tui
+npm ci
+npm run build
+npm link
 dsh-tui auth login
 dsh-tui
 ~~~
+
+The public v0.1 preview is currently installed from source. The npm package has not been published yet.
 
 `auth login` reads the DeepSeek API key without echoing it and saves it once. Later launches start without asking again. A bare ACP launch also offers this one-time hidden setup when no credential exists. The default model is `deepseek-v4-flash`.
 
@@ -134,7 +143,7 @@ Choose + New session to create a real ACP session. The previous transcript, part
 - Only one prompt may be in flight at a time.
 - If the model price is unknown, cost is shown as unavailable instead of guessed.
 - A backend exit or timeout does not automatically replay the prompt because its side effects are unknown.
-- Remote GitHub Actions and package publication are release-owner actions; this repository does not claim they have run locally.
+- The v0.1 preview is source-distributed; the npm package is not published yet.
 
 ## Troubleshooting
 

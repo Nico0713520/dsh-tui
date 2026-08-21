@@ -257,4 +257,3 @@ Run `deepseek` in the user's configured terminal and verify:
 git add README.md README.zh-CN.md assets/brand/README.md docs/release/v0.1.0-visual-verification.md docs/release/v0.1.0-local-verification.md
 git commit -m "docs: record natural welcome scrolling"
 ```
-

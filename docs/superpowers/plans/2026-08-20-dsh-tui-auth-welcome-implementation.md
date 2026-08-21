@@ -80,7 +80,7 @@ git commit -m "feat: add managed DeepSeek credentials"
 - Modify: `src/cli.ts`
 - Modify: `config/cordis.posix.yml`
 - Modify: `config/cordis.windows.yml`
-- Modify: `/Users/zhengdeweishi/.local/bin/deepseek`
+- Modify: `~/.local/bin/deepseek`
 
 **Interfaces:**
 - Consumes: Task 1 credential functions.

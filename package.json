@@ -1,7 +1,7 @@
 {
   "name": "@nico0713520/dsh-tui",
   "version": "0.1.0",
-  "description": "A safe, readable terminal client for DeepSeek Harness ACP",
+  "description": "A lightweight, calm TUI built on the original DeepSeek Harness ACP flow",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Nico0713520/dsh-tui.git"

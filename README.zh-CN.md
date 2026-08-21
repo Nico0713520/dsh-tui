@@ -1,25 +1,34 @@
 # dsh-tui
 
-![dsh-tui ACP 演示](https://raw.githubusercontent.com/Nico0713520/dsh-tui/main/assets/demo.gif)
+[English](README.md)
 
-![dsh-tui 审批界面](https://raw.githubusercontent.com/Nico0713520/dsh-tui/main/assets/screenshot.png)
+![dsh-tui 欢迎页与对话界面](https://raw.githubusercontent.com/Nico0713520/dsh-tui/master/assets/screenshot.png)
 
-一个独立社区开发的 DeepSeek Harness ACP 终端界面：流式 Markdown、语义工具卡片、明确的权限审批、只读历史，以及不乱猜价格的 token/cost 状态。
+一个轻量、舒服耐看的 DeepSeek Harness TUI。它保留原本的 DSH 包与 ACP 工作流，在上面增加流式回复、工具状态、明确审批、只读历史和诚实 usage 状态的终端界面。
+
+- **原汁原味的 Harness 流程：** 直接建立在 DeepSeek Harness composition 上，不重写 agent 后端。
+- **轻量交互：** 输入响应及时，渲染工作有上限；可选实时事件管道不可用时会稳妥回退。
+- **舒服耐看：** 克制的欢迎面板、随对话自然上移的排版，以及原终端背景和 DeepSeek 蓝白两套主题。
 
 DeepSeek 名称和官方蓝色鲸鱼图标归其权利人所有。本项目不是 DeepSeek 官方开发、背书、赞助或发布的产品。
 
 [![CI](https://github.com/Nico0713520/dsh-tui/actions/workflows/ci.yml/badge.svg)](https://github.com/Nico0713520/dsh-tui/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/%40nico0713520%2Fdsh-tui?label=npm)](https://www.npmjs.com/package/@nico0713520/dsh-tui)
 [![Node.js](https://img.shields.io/badge/node-22.19%2B%20%7C%2024%2B-339933)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ## 安装与启动
 
 ~~~bash
-npm install -g @nico0713520/dsh-tui
+git clone https://github.com/Nico0713520/dsh-tui.git
+cd dsh-tui
+npm ci
+npm run build
+npm link
 dsh-tui auth login
 dsh-tui
 ~~~
+
+公开的 v0.1 预览版目前从源码安装，npm 包尚未发布。
 
 `auth login` 会隐藏输入 DeepSeek API key 并只保存一次；以后启动不再重复询问。如果直接启动 ACP 且尚未配置，也会进入同一次隐藏设置。默认模型是 `deepseek-v4-flash`。
 
@@ -134,7 +143,7 @@ backend command 接收 JSON 数组，不是 shell 命令字符串，也不会交
 - 同时只能有一个 prompt 在执行。
 - 模型价格未知时显示 unavailable，不会猜一个 cost。
 - 后端退出或超时时不会自动重放 prompt，因为副作用结果未知。
-- 远端 GitHub Actions 和包发布属于发布负责人动作；本仓库不宣称这些动作已在本地完成。
+- 当前 v0.1 预览版通过源码分发，npm 包尚未发布。
 
 ## 故障排查
 
