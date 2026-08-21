@@ -134,7 +134,7 @@ input.on("line", (line) => {
     }, permissionDelayMs)
     return
   }
-  if (scenario === "delayed") return
+  if (scenario === "delayed" || scenario === "prompt-timeout") return
 
   if (scenario === "live-stream") {
     liveRecords([

@@ -128,18 +128,33 @@ describe("AcpClient", () => {
   })
 
   it("terminates and reaps a backend whose stdin fails while it remains alive", async () => {
-    const signals: Array<NodeJS.Signals | null> = []
+    const exits: Array<{ signal: NodeJS.Signals | null; outcomeUnknown: boolean }> = []
     const events = createEvents({
-      onBackendExit(info) { signals.push(info.signal) },
+      onBackendExit(info) { exits.push({ signal: info.signal, outcomeUnknown: info.outcomeUnknown }) },
     })
     const acp = client("stdin-close", events, { "session/prompt": 2_000 })
     await acp.newSession()
     await waitFor(() => events.live.length === 1)
 
     await expect(acp.prompt("cannot arrive")).rejects.toThrow(/stdin|exited|unknown/i)
-    await waitFor(() => signals.length === 1)
+    await waitFor(() => exits.length === 1)
 
-    expect(signals).toEqual(["SIGTERM"])
+    expect(exits).toHaveLength(1)
+    expect(exits[0]?.outcomeUnknown).toBe(true)
+    if (process.platform !== "win32") expect(exits[0]?.signal).toBe("SIGTERM")
+    await expect(acp.close()).resolves.toBeUndefined()
+  })
+
+  it("terminates an unresponsive backend after an ACP request timeout", async () => {
+    const events = createEvents()
+    const acp = client("prompt-timeout", events, { "session/prompt": 50 })
+    await acp.newSession()
+
+    await expect(acp.prompt("never answered")).rejects.toThrow(/timed out|outcome unknown/i)
+    await waitFor(() => events.exits.length === 1)
+
+    expect(events.exits).toEqual([{ outcomeUnknown: true }])
+    expect(acp.activeSessionId).toBeNull()
     await expect(acp.close()).resolves.toBeUndefined()
   })
 

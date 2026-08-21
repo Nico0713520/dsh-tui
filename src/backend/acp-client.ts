@@ -78,6 +78,8 @@ export class AcpClient {
   private closing = false
   private closePromise: Promise<void> | null = null
   private exitReported = false
+  private outcomeUnknownOnExit = false
+  private terminationRequested = false
 
   constructor(options: AcpClientOptions) {
     if (options.command.length === 0 || !options.command[0]?.trim()) {
@@ -270,6 +272,8 @@ export class AcpClient {
     }) as ChildProcessWithoutNullStreams
     this.process = child
     this.exitReported = false
+    this.outcomeUnknownOnExit = false
+    this.terminationRequested = false
     this.livePipeFailed = false
     this.output = createInterface({ input: child.stdout })
     this.output.on("line", (line) => this.handleLine(line))
@@ -310,12 +314,7 @@ export class AcpClient {
     child.stdin.on("error", (error) => {
       if (this.process !== child) return
       this.events.onDiagnostic(`backend stdin failed: ${safeErrorText(error)}; terminating backend`)
-      this.tryLifecycleAction("ACP stdin failure termination failed", () => { child.kill() })
-      const force = setTimeout(() => {
-        if (this.process !== child || child.exitCode !== null || child.signalCode !== null) return
-        this.tryLifecycleAction("ACP stdin failure force termination failed", () => { child.kill("SIGKILL") })
-      }, 250)
-      force.unref()
+      this.requestTermination(child, "ACP stdin failure")
     })
     child.once("error", (error) => {
       this.events.onDiagnostic(`backend start/error: ${safeErrorText(error)}`)
@@ -343,7 +342,9 @@ export class AcpClient {
     this.promptInFlight = false
     this.promptRequestSent = false
     this.promptCancelRequested = false
-    const outcomeUnknown = this.pending.size > 0
+    const outcomeUnknown = this.outcomeUnknownOnExit || this.pending.size > 0
+    this.outcomeUnknownOnExit = false
+    this.terminationRequested = false
     this.rejectPending(error)
     if (!this.closing && !this.closed && !this.exitReported) {
       this.exitReported = true
@@ -466,7 +467,10 @@ export class AcpClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
+        this.outcomeUnknownOnExit = true
         reject(new Error(`ACP ${method} timed out after ${timeoutMs}ms; outcome unknown`))
+        const child = this.process
+        if (child) this.requestTermination(child, `ACP ${method} timeout`)
       }, timeoutMs)
       this.pending.set(id, { method, resolve, reject, timer })
       try {
@@ -513,6 +517,17 @@ export class AcpClient {
     } catch (error) {
       this.events.onDiagnostic(`${label}: ${safeErrorText(error)}`)
     }
+  }
+
+  private requestTermination(child: ChildProcessWithoutNullStreams, label: string): void {
+    if (this.process !== child || this.terminationRequested) return
+    this.terminationRequested = true
+    this.tryLifecycleAction(`${label} termination failed`, () => { child.kill() })
+    const force = setTimeout(() => {
+      if (this.process !== child || child.exitCode !== null || child.signalCode !== null) return
+      this.tryLifecycleAction(`${label} force termination failed`, () => { child.kill("SIGKILL") })
+    }, 250)
+    force.unref()
   }
 
   private waitForExit(child: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<boolean> {
