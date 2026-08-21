@@ -24,14 +24,22 @@ const child = spawn(process.execPath, [backendBin, "--config", configPath], {
     DSH_PERSIST_ROOT: root,
     DEEPSEEK_API_KEY: "composition-smoke-placeholder",
   },
-  stdio: ["pipe", "pipe", "ignore"],
+  stdio: ["pipe", "pipe", "pipe"],
   windowsHide: true,
 })
 
 const output = createInterface({ input: child.stdout })
+let stderrTail = ""
+child.stderr.setEncoding("utf8")
+child.stderr.on("data", (chunk) => {
+  stderrTail = `${stderrTail}${chunk}`.slice(-8_192)
+})
 let nextId = 1
 let settled = false
 const pending = new Map()
+const exitFailure = (message) => new Error(
+  stderrTail.trim() ? `${message}\nbackend stderr:\n${stderrTail.trim()}` : message,
+)
 const fail = (error) => {
   for (const request of pending.values()) request.reject(error)
   pending.clear()
@@ -52,7 +60,7 @@ output.on("line", (line) => {
 })
 child.once("error", () => fail(new Error("composition backend failed to spawn")))
 child.once("exit", (code, signal) => {
-  if (!settled) fail(new Error(`composition backend exited (${code ?? signal ?? "unknown"})`))
+  if (!settled) fail(exitFailure(`composition backend exited (${code ?? signal ?? "unknown"})`))
 })
 
 function call(method, params) {
@@ -81,7 +89,7 @@ try {
   settled = true
   child.stdin.end()
   const exit = await waitForExit()
-  if (exit.code !== 0 || exit.signal !== null) throw new Error(`composition backend exited unexpectedly (${exit.code ?? exit.signal ?? "unknown"})`)
+  if (exit.code !== 0 || exit.signal !== null) throw exitFailure(`composition backend exited unexpectedly (${exit.code ?? exit.signal ?? "unknown"})`)
   console.log(`composition check passed: ${process.platform}`)
 } finally {
   clearTimeout(timeout)
