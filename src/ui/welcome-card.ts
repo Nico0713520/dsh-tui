@@ -108,7 +108,7 @@ function renderSplitCard(options: WelcomeCardOptions, width: number): string[] {
       lines.push(`${options.theme.fg("border", "│")}${fit(left, leftWidth, "center")}${options.theme.fg("border", `├${"─".repeat(rightWidth)}┤`)}`)
       continue
     }
-    const right = fit(rightContent(row, dividerRow, rightWidth, options.theme), rightWidth)
+    const right = ` ${fit(rightContent(row, dividerRow, rightWidth - 2, options.theme), rightWidth - 2)} `
     if (inlineImage(left)) {
       // Inline-image protocol rows must remain control-sequence-only. Prefixing
       // border text would expose the encoded payload in conservative terminals.
@@ -148,7 +148,11 @@ function renderCompactCard(options: WelcomeCardOptions, width: number): string[]
 }
 
 export class WelcomeCard implements Component {
-  constructor(private readonly options: WelcomeCardOptions) {}
+  private readonly options: WelcomeCardOptions
+
+  constructor(options: WelcomeCardOptions) {
+    this.options = options
+  }
 
   render(width: number): string[] {
     const columns = Math.max(1, Math.min(width, this.options.columns))

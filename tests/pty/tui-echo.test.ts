@@ -6,10 +6,14 @@ describe("real Echo TUI", () => {
   it("shows the complete welcome immediately and folds it after the first prompt", async () => {
     const terminal = spawnTui(["src/main.ts", "--echo", "--motion", "off"], { cols: 120, rows: 30 })
     try {
-      await terminal.waitForText("DeepSeek Harness")
-      expect(terminal.screenText()).toContain("⢀⣴⣶")
-      expect(terminal.screenText()).toContain("workspace-write")
+      await terminal.waitForText("Welcome back!")
+      await terminal.waitForText("Quick actions")
+      expect(terminal.screenText()).toContain("▗████████▙▖")
+      expect(terminal.screenText()).toContain("Tips for getting started")
+      expect(terminal.screenText()).toContain("Quick actions")
       expect(terminal.screenText()).toContain("deepseek-v4-flash")
+      expect(terminal.screenText()).not.toContain("workspace-write")
+      expect(terminal.screenText()).not.toContain("approval ask")
 
       const promptStart = terminal.rawLength()
       terminal.write("hello\r")
@@ -17,7 +21,8 @@ describe("real Echo TUI", () => {
       await terminal.waitForText("端。", 2_000, promptStart)
       await terminal.waitForText("ready", 2_000, promptStart)
       await new Promise((resolve) => setTimeout(resolve, 100))
-      expect(terminal.screenText()).not.toContain("⢀⣴⣶")
+      expect(terminal.screenText()).not.toContain("Welcome back!")
+      expect(terminal.screenText()).not.toContain("▗████████▙▖")
       expect(terminal.screenText()).toContain("DeepSeek Harness")
 
       const statusStart = terminal.rawLength()
@@ -84,6 +89,27 @@ describe("real Echo TUI", () => {
     }
   }, 15_000)
 
+  it("keeps the empty welcome composed while resizing from wide to text-only", async () => {
+    const terminal = spawnTui(["src/main.ts", "--echo", "--motion", "off"], { cols: 120, rows: 30 })
+    try {
+      await terminal.waitForText("Welcome back!")
+      for (const [columns, rows] of [[80, 24], [60, 20], [48, 18], [32, 14]] as const) {
+        terminal.resize(columns, rows)
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        const overflow = terminal.screenText().split("\n").filter((line) => visibleWidth(line) > columns)
+        expect(overflow).toEqual([])
+      }
+      expect(terminal.screenText()).toContain("dsh-tui")
+      expect(terminal.screenText()).not.toContain("╭")
+      terminal.write("\u0003")
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      terminal.write("\u0003")
+      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+    } finally {
+      terminal.kill()
+    }
+  }, 10_000)
+
   it("renders the faithful inline whale on image-capable terminals", async () => {
     const terminal = spawnTui(["src/main.ts", "--echo", "--motion", "off"], {
       cols: 120,
@@ -128,7 +154,8 @@ describe("real Echo TUI", () => {
     })
     try {
       await noColor.waitForText("DeepSeek Harness")
-      expect(noColor.screenText()).toContain("⣠⣶⣷")
+      expect(noColor.screenText()).toContain("▟██████▙")
+      expect(noColor.screenText()).not.toMatch(/[\u2800-\u28ff]/u)
       expect(noColor.raw()).not.toContain("\x1b[38;2;")
       expect(noColor.raw()).not.toContain("\x1b[48;2;")
       noColor.write("\u0003")

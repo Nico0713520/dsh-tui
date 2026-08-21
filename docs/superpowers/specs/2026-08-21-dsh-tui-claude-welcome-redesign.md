@@ -67,10 +67,10 @@ with an invented whale.
 
 ### Text-terminal renderer
 
-- Replace the current Braille strings with a deterministic solid half-block
+- Replace the current Braille strings with a deterministic solid quadrant-block
   raster sampled from the official SVG alpha mask.
 - The full fallback target is 16 columns by 6 terminal rows, equivalent to a
-  16×12 binary pixel grid rendered with `▀`, `▄`, `█`, and spaces.
+  32×12 binary subpixel grid rendered with Unicode solid block elements.
 - Sampling preserves the official aspect ratio and centers the non-empty bounds.
 - The eye and inner face separation must remain visible at the full tier. The
   tail, raised back, rounded body, and lower return stroke must read as one
@@ -78,8 +78,8 @@ with an invented whale.
 - The fallback uses only the semantic `brand` foreground color and transparent
   terminal background. It must look solid like Claude's pixel mascot, not dotted,
   noisy, or calligraphic.
-- The compact fallback is separately sampled at 12×5 cells; it is not produced by
-  truncating the full string.
+- The compact fallback is separately sampled from a 24×10 subpixel grid into
+  12×5 cells; it is not produced by truncating the full string.
 - `NO_COLOR` uses the same glyph geometry without ANSI color.
 
 ### Image-capable renderer

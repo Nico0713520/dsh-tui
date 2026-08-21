@@ -46,12 +46,12 @@
 
 ```ts
 expect(whalePixelArt("full")).toEqual([
-  "  ▄▄████  ▄█▄ ▄▄",
-  "▄████████▄ ▀███▀",
-  "█▀ ▀▀████▀████",
-  "██    ▀██████",
-  " ██▄ ▄▄ ████",
-  "  ▀██████▀▀▀▀",
+  " ▗▄▄▟▄██▘ ▐▙▄ ▄▄",
+  "▗████████▙▖▜███▀",
+  "█▘ ▀▀████▀███▌",
+  "█▙    ▀██▙▟█▛",
+  "▝▜▙▖ ▗▄▝▜██▛",
+  "  ▀▜█████▀▀▀▘",
 ])
 expect(whalePixelArt("full").join("\n")).not.toMatch(/[\u2800-\u28ff]/u)
 expect(whalePixelArt("full").every((row) => visibleWidth(row) <= 16)).toBe(true)
@@ -64,26 +64,26 @@ Run: `npx vitest run tests/unit/brand-logo.test.ts`
 
 Expected: FAIL because `whalePixelArt` is not exported and the existing fallback still contains Braille glyphs.
 
-- [ ] **Step 3: Implement the fixed full and compact half-block samples**
+- [ ] **Step 3: Implement the fixed full and compact quadrant-block samples**
 
 ```ts
 export type WhalePixelTier = "full" | "compact"
 
 const WHALE_PIXELS: Record<WhalePixelTier, readonly string[]> = {
   full: [
-    "  ▄▄████  ▄█▄ ▄▄",
-    "▄████████▄ ▀███▀",
-    "█▀ ▀▀████▀████",
-    "██    ▀██████",
-    " ██▄ ▄▄ ████",
-    "  ▀██████▀▀▀▀",
+    " ▗▄▄▟▄██▘ ▐▙▄ ▄▄",
+    "▗████████▙▖▜███▀",
+    "█▘ ▀▀████▀███▌",
+    "█▙    ▀██▙▟█▛",
+    "▝▜▙▖ ▗▄▝▜██▛",
+    "  ▀▜█████▀▀▀▘",
   ],
   compact: [
-    " ▄████  █▄▄▄",
-    "███████▄███▀",
-    "█   ▀█████",
-    "▀█  ▄▀███▀",
-    " ▀█████▀▀",
+    " ▄▟███▖ █▄▄▄",
+    "▟██████▙▞█▛▘",
+    "█  ▝▜██▝██",
+    "▜▙▖ ▄▝███▘",
+    " ▝▜███▟▀▀▘",
   ],
 }
 

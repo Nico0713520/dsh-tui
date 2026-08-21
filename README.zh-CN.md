@@ -81,7 +81,7 @@ dsh-tui theme terminal
 
 解析优先级为 `--theme terminal|deepseek`、`DSH_TUI_THEME`、已保存偏好、`terminal`。单次启动覆盖不会改写已保存设置。`NO_COLOR` 只关闭装饰颜色，不破坏布局，也不会擅自修改明确指定的动效策略。
 
-欢迎页使用未经改动的官方 `#4D6BFE` 鲸鱼：Kitty/iTerm2 终端显示透明行内图片；不支持图片的终端显示从同一图形采样的固定 Braille 轮廓；窄于 34 列时使用纯文字。鲸鱼本体永不变形或动画，只有相邻分隔线和状态强调会动。详见[第三方声明](THIRD_PARTY_NOTICES.md)。
+欢迎页采用克制的带框双栏排版：左侧是居中的 DeepSeek 品牌区，右侧只有两段简短的开始提示；Session ID 和安全诊断不再堆在首屏，仍可通过 `/status` 查看。Kitty/iTerm2 会显示未经改动的官方 `#4D6BFE` 透明鲸鱼图片；不支持图片的终端显示从同一轮廓采样的固定实心块图形；窄于 34 列时使用纯文字。鲸鱼本体永不变形或动画。详见[第三方声明](THIRD_PARTY_NOTICES.md)。
 
 ## 按键与选项
 

@@ -37,21 +37,21 @@ describe("official DeepSeek whale", () => {
     expect(brandLogoMode({ images: null, trueColor: false, hyperlinks: false }, 32)).toBe("text")
   })
 
-  it("uses stable solid half-block samples of the official silhouette", () => {
+  it("uses stable solid block samples of the official silhouette", () => {
     expect(whalePixelArt("full")).toEqual([
-      "  ▄▄████  ▄█▄ ▄▄",
-      "▄████████▄ ▀███▀",
-      "█▀ ▀▀████▀████",
-      "██    ▀██████",
-      " ██▄ ▄▄ ████",
-      "  ▀██████▀▀▀▀",
+      " ▗▄▄▟▄██▘ ▐▙▄ ▄▄",
+      "▗████████▙▖▜███▀",
+      "█▘ ▀▀████▀███▌",
+      "█▙    ▀██▙▟█▛",
+      "▝▜▙▖ ▗▄▝▜██▛",
+      "  ▀▜█████▀▀▀▘",
     ])
     expect(whalePixelArt("compact")).toEqual([
-      " ▄████  █▄▄▄",
-      "███████▄███▀",
-      "█   ▀█████",
-      "▀█  ▄▀███▀",
-      " ▀█████▀▀",
+      " ▄▟███▖ █▄▄▄",
+      "▟██████▙▞█▛▘",
+      "█  ▝▜██▝██",
+      "▜▙▖ ▄▝███▘",
+      " ▝▜███▟▀▀▘",
     ])
     expect(whalePixelArt("full")).toHaveLength(6)
     expect(whalePixelArt("compact")).toHaveLength(5)

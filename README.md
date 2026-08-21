@@ -81,7 +81,7 @@ dsh-tui theme terminal
 
 The saved preference is resolved after `--theme terminal|deepseek` and `DSH_TUI_THEME`, so a launch-specific override never rewrites the saved setting. `NO_COLOR` disables decorative color while keeping layout and the explicitly requested motion policy.
 
-The welcome uses the unchanged official `#4D6BFE` whale. Kitty/iTerm2 terminals receive the transparent inline image, text-only terminals receive a fixed Braille silhouette sampled from the same artwork, and terminals below 34 columns use text-only identity. The whale itself is never animated; only adjacent status/divider emphasis moves. See [third-party notices](THIRD_PARTY_NOTICES.md).
+The welcome uses a calm framed split layout: a centered DeepSeek identity area on the left and two short getting-started sections on the right. Session IDs and safety diagnostics stay out of the hero and remain available through `/status`. The unchanged official `#4D6BFE` whale is rendered as a transparent inline image in Kitty/iTerm2 and as a fixed solid block sample of the same silhouette in text terminals; terminals below 34 columns use text-only identity. The whale itself is never animated. See [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Keys and options
 

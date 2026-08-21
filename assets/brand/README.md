@@ -12,8 +12,9 @@ DeepSeek API documentation site:
 `deepseek-whale.png.base64` is the deterministic PNG protocol cache used only
 for terminal inline-image protocols. Display scaling preserves aspect ratio.
 
-The text-terminal Braille fallback in `src/ui/brand-logo.ts` is sampled from
-the same silhouette. It is a rendering fallback, not a replacement logo.
+The text-terminal solid quadrant-block fallback in `src/ui/brand-logo.ts` is
+sampled from the same silhouette at a fixed 32 × 12 or 24 × 10 subpixel grid.
+It is a rendering fallback, not a replacement logo.
 Do not redraw, recolor, crop, distort, or animate the official whale.
 
 DeepSeek and its whale mark belong to their respective owner. This repository
