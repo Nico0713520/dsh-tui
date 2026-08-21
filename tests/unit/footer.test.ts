@@ -27,13 +27,19 @@ const options = {
 
 describe("adaptive footer", () => {
   it("shows all observable details when space is available", () => {
-    const text = stripTerminalSequences(footerText(state, options, 160, createUiTheme("terminal")))
+    const active = { ...state, phase: "working", activity: { kind: "thinking" } } satisfies AppState
+    const text = stripTerminalSequences(footerText(active, options, 160, createUiTheme("terminal")))
     expect(text).toContain("deepseek-v4-flash")
     expect(text).toContain("dsh-tui")
     expect(text).toContain("12s")
     expect(text).toContain("session-")
     expect(text).toContain("cached")
     expect(text).toContain("$")
+  })
+
+  it("omits meaningless elapsed time while idle", () => {
+    const text = stripTerminalSequences(footerText(state, { ...options, elapsedSeconds: 0 }, 120, createUiTheme("terminal")))
+    expect(text).not.toContain("0s")
   })
 
   it("removes cost, token, session, elapsed, then workspace as width shrinks", () => {

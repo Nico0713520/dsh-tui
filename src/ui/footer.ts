@@ -75,7 +75,9 @@ export function footerText(
 
   const segments: string[] = []
   if (options.cwd) segments.push(theme.fg("muted", workspaceTail(options.cwd)))
-  if (options.elapsedSeconds !== undefined) segments.push(theme.fg("muted", `${Math.max(0, options.elapsedSeconds)}s`))
+  if (options.elapsedSeconds !== undefined && (state.phase === "working" || state.phase === "cancelling")) {
+    segments.push(theme.fg("muted", `${Math.max(0, options.elapsedSeconds)}s`))
+  }
   if (state.sessionId) segments.push(theme.fg("muted", singleLine(state.sessionId, 9)))
   if (state.usage.inputTokens || state.usage.outputTokens || state.usage.cacheReadTokens) {
     segments.push(theme.fg("muted", `${state.usage.inputTokens ?? 0}in/${state.usage.outputTokens ?? 0}out/${state.usage.cacheReadTokens ?? 0}cached`))
@@ -84,7 +86,8 @@ export function footerText(
 
   for (const segment of segments) {
     const candidate = `${text} · ${segment}`
-    if (visibleWidth(candidate) <= width) text = candidate
+    if (visibleWidth(candidate) > width) break
+    text = candidate
   }
   return truncateToWidth(text, width, "…")
 }

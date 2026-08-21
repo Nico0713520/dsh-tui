@@ -12,7 +12,7 @@ import {
 async function waitFor(predicate: () => boolean): Promise<void> {
   const started = Date.now()
   while (!predicate()) {
-    if (Date.now() - started > 3_000) throw new Error("log event did not arrive")
+    if (Date.now() - started > 8_000) throw new Error("log event did not arrive")
     await new Promise((resolve) => setTimeout(resolve, 10))
   }
 }

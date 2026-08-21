@@ -3,6 +3,8 @@ import { closeSync, createWriteStream } from "node:fs"
 import { Socket } from "node:net"
 
 const scenario = process.env.FAKE_ACP_SCENARIO ?? "normal"
+const permissionCancelledText = process.env.FAKE_ACP_PERMISSION_CANCELLED_TEXT ?? "cancelled"
+const permissionDelayMs = Number.parseInt(process.env.FAKE_ACP_PERMISSION_DELAY_MS ?? "0", 10) || 0
 const input = createInterface({ input: process.stdin })
 const controlInput = new Socket({ fd: 4, readable: true, writable: false })
 controlInput.unref()
@@ -85,7 +87,7 @@ input.on("line", (line) => {
 
   if (frame.id === permissionId && frame.result) {
     if (frame.result.outcome?.outcome === "selected" && frame.result.outcome?.optionId === "allow-once") assistant("allowed")
-    else assistant("cancelled")
+    else assistant(permissionCancelledText)
     if (promptId !== null) result(promptId, { stopReason: frame.result.outcome?.outcome === "selected" ? "end_turn" : "cancelled" })
     return
   }
@@ -117,14 +119,16 @@ input.on("line", (line) => {
   }
   if (scenario === "permission") {
     permissionId += 1
-    send({
-      id: permissionId,
-      method: "session/request_permission",
-      params: {
-        toolCall: { toolCallId: "call-1", title: "run command" },
-        options: [{ optionId: "allow-once", name: "Allow" }, { optionId: "reject-once", name: "Reject" }],
-      },
-    })
+    setTimeout(() => {
+      send({
+        id: permissionId,
+        method: "session/request_permission",
+        params: {
+          toolCall: { toolCallId: "call-1", title: "run command" },
+          options: [{ optionId: "allow-once", name: "Allow" }, { optionId: "reject-once", name: "Reject" }],
+        },
+      })
+    }, permissionDelayMs)
     return
   }
   if (scenario === "delayed") return

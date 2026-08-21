@@ -12,7 +12,7 @@ const pause = (milliseconds: number) => new Promise((resolve) => setTimeout(reso
 
 async function exitTui(terminal: ReturnType<typeof spawnTui>): Promise<void> {
   terminal.write("\u0003")
-  await pause(60)
+  await terminal.waitForText("Ctrl+C again to exit", 2_000)
   terminal.write("\u0003")
   await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
 }
@@ -31,7 +31,17 @@ function acpArgs(persistRoot: string): string[] {
 
 async function withAcp(scenario: string, run: (terminal: ReturnType<typeof spawnTui>, root: string) => Promise<void>): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "dsh-pty-acp-"))
-  const terminal = spawnTui(acpArgs(root), { env: { FAKE_ACP_SCENARIO: scenario, DSH_TUI_MOTION: "off", DEEPSEEK_API_KEY: TEST_API_KEY }, cols: 80, rows: 24 })
+  const terminal = spawnTui(acpArgs(root), {
+    env: {
+      FAKE_ACP_SCENARIO: scenario,
+      FAKE_ACP_PERMISSION_CANCELLED_TEXT: "permission cancelled",
+      FAKE_ACP_PERMISSION_DELAY_MS: "250",
+      DSH_TUI_MOTION: "off",
+      DEEPSEEK_API_KEY: TEST_API_KEY,
+    },
+    cols: 80,
+    rows: 24,
+  })
   try {
     await terminal.waitForText("fake-001")
     await run(terminal, root)
@@ -102,8 +112,9 @@ describe("real ACP TUI", () => {
 
   it("allows the offered permission option through the overlay", async () => {
     await withAcp("permission", async (terminal) => {
+      const approvalStart = terminal.rawLength()
       terminal.write("run the command\r")
-      await terminal.waitForText("approval")
+      await terminal.waitForText("Allow this action", 8_000, approvalStart)
       terminal.write("\r")
       await terminal.waitForText("allowed")
       await exitTui(terminal)
@@ -112,22 +123,24 @@ describe("real ACP TUI", () => {
 
   it("rejects the offered permission option through the overlay", async () => {
     await withAcp("permission", async (terminal) => {
+      const approvalStart = terminal.rawLength()
       terminal.write("run the command\r")
-      await terminal.waitForText("approval")
+      await terminal.waitForText("Allow this action", 8_000, approvalStart)
       terminal.write("\u001b[B")
       await pause(80)
       terminal.write("\r")
-      await terminal.waitForText("cancelled")
+      await terminal.waitForText("permission cancelled")
       await exitTui(terminal)
     })
   }, 15_000)
 
   it("lets Escape close an approval overlay without sending session cancel", async () => {
     await withAcp("permission", async (terminal) => {
+      const approvalStart = terminal.rawLength()
       terminal.write("run the command\r")
-      await terminal.waitForText("approval")
+      await terminal.waitForText("Allow this action", 8_000, approvalStart)
       terminal.write("\u001b")
-      await terminal.waitForText("cancelled")
+      await terminal.waitForText("permission cancelled")
       expect(terminal.screenText()).not.toContain("unexpected-session-cancel")
       await exitTui(terminal)
     })
