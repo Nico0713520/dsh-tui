@@ -96,4 +96,17 @@ describe("dsh-tui CLI authentication", () => {
     expect(test.secretReads()).toBe(0)
     expect(test.configs).toHaveLength(1)
   })
+
+  it("manages the saved theme without reading credentials or launching the TUI", async () => {
+    const test = await harness()
+
+    await expect(runCli(["theme", "status"], {}, test.dependencies)).resolves.toBe(0)
+    await expect(runCli(["theme", "deepseek"], {}, test.dependencies)).resolves.toBe(0)
+    await expect(runCli(["theme", "status"], {}, test.dependencies)).resolves.toBe(0)
+    await expect(runCli(["theme", "terminal"], {}, test.dependencies)).resolves.toBe(0)
+
+    expect(test.output()).toBe("terminal\ndeepseek\ndeepseek\nterminal\n")
+    expect(test.secretReads()).toBe(0)
+    expect(test.configs).toHaveLength(0)
+  })
 })

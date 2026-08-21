@@ -11,6 +11,7 @@ describe("default ACP composition", () => {
       persistRoot: "/tmp/sessions",
       toolCards: true,
       motion: "full" as const,
+      theme: "terminal" as const,
       perf: false,
     })
 
@@ -27,6 +28,7 @@ describe("default ACP composition", () => {
       persistRoot: "/tmp/sessions",
       toolCards: true,
       motion: "full" as const,
+      theme: "terminal" as const,
       perf: false,
     }
     expect(resolveDefaultBackendCommand(config, "win32").join(" ")).toContain("cordis.windows.yml")

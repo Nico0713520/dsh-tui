@@ -36,6 +36,7 @@ describe("live dsh ACP flow", () => {
       persistRoot: join(workspace, "sessions"),
       toolCards: true,
       motion: "off",
+      theme: "terminal",
       perf: false,
     }
     const states: AppState[] = []

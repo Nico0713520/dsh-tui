@@ -60,6 +60,16 @@ describe("loadConfig", () => {
     expect(() => loadConfig([], { DSH_TUI_PERF: "yes" }, "linux")).toThrow(/perf/i)
   })
 
+  it("resolves theme precedence from CLI, environment, saved preference, then terminal", () => {
+    expect(loadConfig([], {}, "linux").theme).toBe("terminal")
+    expect(loadConfig([], {}, "linux", { theme: "deepseek" }).theme).toBe("deepseek")
+    expect(loadConfig([], { DSH_TUI_THEME: "terminal" }, "linux", { theme: "deepseek" }).theme)
+      .toBe("terminal")
+    expect(loadConfig(["--theme", "deepseek"], { DSH_TUI_THEME: "terminal" }, "linux").theme)
+      .toBe("deepseek")
+    expect(() => loadConfig([], { DSH_TUI_THEME: "blue" }, "linux")).toThrow(/theme/i)
+  })
+
   it("supports echo mode and rejects malformed configuration", () => {
     expect(loadConfig(["--echo"], {}, "linux").mode).toBe("echo")
     expect(() => loadConfig([], { DSH_TUI_MODE: "bogus" }, "linux")).toThrow(/mode/i)

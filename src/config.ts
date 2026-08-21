@@ -1,6 +1,7 @@
 import { homedir } from "node:os"
 import { join, resolve } from "node:path"
 import { parseArgs } from "node:util"
+import type { ThemePreference, UiPreferences } from "./preferences.ts"
 
 export type RunMode = "acp" | "echo"
 export type MotionPreference = "full" | "reduced" | "off"
@@ -12,6 +13,7 @@ export interface AppConfig {
   persistRoot: string
   toolCards: boolean
   motion: MotionPreference
+  theme: ThemePreference
   perf: boolean
   backendCommand?: readonly string[]
 }
@@ -25,6 +27,7 @@ interface ParsedValues {
   "tool-cards"?: string
   "backend-command-json"?: string
   motion?: string
+  theme?: string
   perf?: boolean
 }
 
@@ -37,6 +40,7 @@ const OPTIONS = {
   "tool-cards": { type: "string" },
   "backend-command-json": { type: "string" },
   motion: { type: "string" },
+  theme: { type: "string" },
   perf: { type: "boolean" },
   help: { type: "boolean" },
   version: { type: "boolean" },
@@ -77,6 +81,7 @@ export function loadConfig(
   argv: readonly string[],
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform = process.platform,
+  defaults: UiPreferences = { theme: "terminal" },
 ): AppConfig {
   const parsed = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true, strict: true }).values as ParsedValues
   const modeValue = parsed.echo === true ? "echo" : parsed.mode ?? env.DSH_TUI_MODE ?? "acp"
@@ -99,6 +104,10 @@ export function loadConfig(
     throw new Error(`motion must be full, reduced, or off; received ${JSON.stringify(requestedMotion)}`)
   }
   const motion: MotionPreference = requestedMotion
+  const requestedTheme = parsed.theme ?? env.DSH_TUI_THEME ?? defaults.theme
+  if (requestedTheme !== "terminal" && requestedTheme !== "deepseek") {
+    throw new Error(`theme must be terminal or deepseek; received ${JSON.stringify(requestedTheme)}`)
+  }
   const perfValue = parsed.perf === true ? "1" : env.DSH_TUI_PERF ?? "0"
   if (perfValue !== "0" && perfValue !== "1") {
     throw new Error(`perf must be 0 or 1; received ${JSON.stringify(perfValue)}`)
@@ -111,6 +120,7 @@ export function loadConfig(
     persistRoot,
     toolCards,
     motion,
+    theme: requestedTheme,
     perf: perfValue === "1",
     ...(backendCommand === undefined ? {} : { backendCommand }),
   }

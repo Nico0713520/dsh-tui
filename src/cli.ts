@@ -8,6 +8,7 @@ import {
   storeDeepSeekCredential,
 } from "./credentials.ts"
 import { readSecretFromTty } from "./secret-input.ts"
+import { loadUiPreferences, saveThemePreference, type ThemePreference } from "./preferences.ts"
 
 export const VERSION = "0.1.0"
 
@@ -16,6 +17,7 @@ export const HELP = `dsh-tui ${VERSION}
 Usage:
   dsh-tui [options]
   dsh-tui auth <login|status|logout>
+  dsh-tui theme <status|terminal|deepseek>
 
 Options:
   --echo                         Run the offline Echo smoke/demo instead of ACP
@@ -26,6 +28,7 @@ Options:
   --tool-cards <on|off>          Enable or disable live session-log cards
   --backend-command-json <json>  Explicit ACP command array, no shell splitting
   --motion <full|reduced|off>    Control the non-blocking entrance motion
+  --theme <terminal|deepseek>    Override the saved appearance preference
   --perf                         Show sanitized turn latency diagnostics
   --help                         Show this help
   --version                      Show the version
@@ -36,6 +39,24 @@ Keys:
 
 interface OutputPort {
   write(text: string): unknown
+}
+
+async function runThemeCommand(
+  command: string | undefined,
+  env: NodeJS.ProcessEnv,
+  dependencies: Required<CliDependencies>,
+): Promise<number> {
+  const options = { env, home: dependencies.home, platform: dependencies.platform }
+  if (command === "status") {
+    dependencies.stdout.write(`${loadUiPreferences(options).theme}\n`)
+    return 0
+  }
+  if (command === "terminal" || command === "deepseek") {
+    await saveThemePreference(command as ThemePreference, options)
+    dependencies.stdout.write(`${command}\n`)
+    return 0
+  }
+  throw new Error("Usage: dsh-tui theme <status|terminal|deepseek>")
 }
 
 export interface CliDependencies {
@@ -110,8 +131,10 @@ export async function runCli(
     return 0
   }
   if (argv[0] === "auth") return runAuthCommand(argv[1], env, dependencies)
+  if (argv[0] === "theme") return runThemeCommand(argv[1], env, dependencies)
 
-  const config = loadConfig(argv, env, dependencies.platform)
+  const preferences = loadUiPreferences({ env, home: dependencies.home, platform: dependencies.platform })
+  const config = loadConfig(argv, env, dependencies.platform, preferences)
   if (config.mode === "acp") {
     const options = { env, home: dependencies.home, platform: dependencies.platform }
     const status = await describeDeepSeekCredential(options)

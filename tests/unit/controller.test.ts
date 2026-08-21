@@ -11,6 +11,7 @@ const config: AppConfig = {
   persistRoot: "/tmp/sessions",
   toolCards: true,
   motion: "full",
+  theme: "terminal",
   perf: false,
 }
 
