@@ -8,6 +8,7 @@ describe("real Echo TUI", () => {
     try {
       await terminal.waitForText("Welcome back!")
       await terminal.waitForText("Quick actions")
+      await terminal.waitForText("deepseek-v4-flash")
       expect(terminal.screenText()).toContain("▗█████████▙▖")
       expect(terminal.screenText()).toContain("Tips for getting started")
       expect(terminal.screenText()).toContain("Quick actions")
