@@ -6,6 +6,8 @@ import type { HistoryEntry, SessionInfo, SessionLogEvent, SessionLogWatchOptions
 import { createAssistantStream } from "./backend/assistant-stream.ts"
 import type { DshLiveRecord } from "./backend/live-record.ts"
 import { TurnPerf } from "./perf.ts"
+import { TranscriptBuilder, historyToTranscript } from "./transcript-builder.ts"
+import { ApprovalQueue } from "./approval-queue.ts"
 
 export type AppPhase = "starting" | "ready" | "working" | "cancelling" | "failed" | "closing"
 
@@ -86,20 +88,14 @@ export class AppController {
   private readonly logs: SessionLogPort
   private readonly view: ControllerView
   private readonly assistantStream = createAssistantStream()
-  private permissionTail: Promise<void> = Promise.resolve()
+  private readonly transcriptBuilder: TranscriptBuilder
+  private readonly approvalQueue = new ApprovalQueue({
+    onTimeout: (waitedMs) => this.addDiagnostic(`approval dialog timed out after ${Math.round(waitedMs / 1000)}s and was denied`),
+  })
   private committedAssistantText = ""
-  private readonly seenToolStarts = new Set<string>()
-  private readonly seenToolEnds = new Set<string>()
-  private readonly liveTools = new Map<string, {
-    name: string
-    arguments: string
-    transcriptIndex: number
-    startedAtMs: number
-  }>()
   private readonly seenUsageSteps = new Set<string>()
   private readonly turnPerf = new TurnPerf()
   private readonly now: () => number
-  private thinkingStartedAtMs: number | null = null
   private perfReported = false
   private stateValue: AppState = {
     phase: "starting",
@@ -127,6 +123,7 @@ export class AppController {
     this.logs = options.logs
     this.view = options.view
     this.now = options.now ?? Date.now
+    this.transcriptBuilder = new TranscriptBuilder(this.now)
   }
 
   get state(): AppState {
@@ -295,12 +292,7 @@ export class AppController {
   }
 
   decidePermission(request: PermissionRequest): Promise<PermissionDecision> {
-    const result = this.permissionTail.then(
-      () => this.runPermissionRequest(request),
-      () => this.runPermissionRequest(request),
-    )
-    this.permissionTail = result.then(() => undefined, () => undefined)
-    return result
+    return this.approvalQueue.enqueue(() => this.runPermissionRequest(request))
   }
 
   private async runPermissionRequest(request: PermissionRequest): Promise<PermissionDecision> {
@@ -351,20 +343,9 @@ export class AppController {
     if (record.kind === "tool-start") {
       if (turnActive) this.turnPerf.mark("first-visible-activity")
       const activity: AppActivity = turnActive ? { kind: "tool", name: record.name } : this.stateValue.activity
-      if (!this.seenToolStarts.has(record.callId) && !this.seenToolEnds.has(record.callId)) {
-        this.seenToolStarts.add(record.callId)
-        const transcriptIndex = this.stateValue.transcript.length
-        this.liveTools.set(record.callId, {
-          name: record.name,
-          arguments: record.arguments,
-          transcriptIndex,
-          startedAtMs: this.now(),
-        })
-        this.setState({
-          partialAssistantText,
-          activity,
-          transcript: [...this.stateValue.transcript, { kind: "tool-call", name: record.name, arguments: record.arguments }],
-        })
+      const applied = this.transcriptBuilder.applyLiveToolStart(record, this.stateValue.transcript)
+      if (applied.accepted) {
+        this.setState({ partialAssistantText, activity, transcript: applied.transcript })
       } else {
         this.setState({ partialAssistantText, activity })
       }
@@ -373,26 +354,9 @@ export class AppController {
     if (record.kind === "tool-end") {
       if (turnActive) this.turnPerf.mark("first-visible-activity")
       const activity: AppActivity = turnActive ? { kind: "thinking" } : this.stateValue.activity
-      const tool = this.liveTools.get(record.callId)
-      if (!this.seenToolEnds.has(record.callId)) {
-        this.seenToolEnds.add(record.callId)
-        this.seenToolStarts.add(record.callId)
-        const item: TranscriptItem = {
-          kind: "tool-result",
-          name: tool?.name ?? "tool",
-          ...(tool ? { arguments: tool.arguments } : {}),
-          text: record.text,
-          isError: record.isError,
-          ...(tool ? { durationMs: Math.max(0, this.now() - tool.startedAtMs) } : {}),
-        }
-        const transcript = [...this.stateValue.transcript]
-        if (tool && transcript[tool.transcriptIndex]?.kind === "tool-call") transcript[tool.transcriptIndex] = item
-        else transcript.push(item)
-        this.setState({
-          partialAssistantText,
-          activity,
-          transcript,
-        })
+      const applied = this.transcriptBuilder.applyLiveToolEnd(record, this.stateValue.transcript)
+      if (applied.accepted) {
+        this.setState({ partialAssistantText, activity, transcript: applied.transcript })
       } else {
         this.setState({ partialAssistantText, activity })
       }
@@ -458,32 +422,11 @@ export class AppController {
 
   private onSessionLogEvent(event: SessionLogEvent): void {
     if (event.kind === "tool-call") {
-      if (this.seenToolStarts.has(event.callId) || this.seenToolEnds.has(event.callId)) return
-      this.seenToolStarts.add(event.callId)
-      this.liveTools.set(event.callId, {
-        name: event.name,
-        arguments: event.arguments,
-        transcriptIndex: this.stateValue.transcript.length,
-        startedAtMs: this.now(),
-      })
-      this.setState({ transcript: [...this.stateValue.transcript, { kind: "tool-call", name: event.name, arguments: event.arguments }] })
+      const transcript = this.transcriptBuilder.applyLogToolCall(event, this.stateValue.transcript)
+      if (transcript) this.setState({ transcript })
     } else if (event.kind === "tool-result") {
-      if (this.seenToolEnds.has(event.callId)) return
-      this.seenToolEnds.add(event.callId)
-      this.seenToolStarts.add(event.callId)
-      const tool = this.liveTools.get(event.callId)
-      const item: TranscriptItem = {
-        kind: "tool-result",
-        name: event.name,
-        ...(tool ? { arguments: tool.arguments } : {}),
-        text: event.text,
-        isError: event.isError,
-        ...(tool ? { durationMs: Math.max(0, this.now() - tool.startedAtMs) } : {}),
-      }
-      const transcript = [...this.stateValue.transcript]
-      if (tool && transcript[tool.transcriptIndex]?.kind === "tool-call") transcript[tool.transcriptIndex] = item
-      else transcript.push(item)
-      this.setState({ transcript })
+      const transcript = this.transcriptBuilder.applyLogToolResult(event, this.stateValue.transcript)
+      if (transcript) this.setState({ transcript })
     } else {
       const key = event.turn === undefined || event.step === undefined ? undefined : `${event.turn}:${event.step}`
       this.applyUsage(event.usage, key)
@@ -498,9 +441,7 @@ export class AppController {
   }
 
   private resetLiveMetadata(): void {
-    this.seenToolStarts.clear()
-    this.seenToolEnds.clear()
-    this.liveTools.clear()
+    this.transcriptBuilder.resetSessionState()
     this.seenUsageSteps.clear()
   }
 
@@ -551,17 +492,16 @@ export class AppController {
     if (patch.activity) {
       const wasThinking = this.stateValue.activity.kind === "thinking"
       const isThinking = patch.activity.kind === "thinking"
-      if (wasThinking && !isThinking && this.thinkingStartedAtMs !== null) {
-        const durationMs = Math.max(0, this.now() - this.thinkingStartedAtMs)
-        this.thinkingStartedAtMs = null
-        if (durationMs >= 250) {
+      if (wasThinking && !isThinking) {
+        const trace = this.transcriptBuilder.closeThinking()
+        if (trace) {
           const transcript = [...(patch.transcript ?? this.stateValue.transcript)]
           const insertionIndex = Math.min(this.stateValue.transcript.length, transcript.length)
-          transcript.splice(insertionIndex, 0, { kind: "thinking-trace", durationMs })
+          transcript.splice(insertionIndex, 0, { kind: "thinking-trace", durationMs: trace.durationMs })
           nextPatch = { ...patch, transcript }
         }
       } else if (!wasThinking && isThinking) {
-        this.thinkingStartedAtMs = this.now()
+        this.transcriptBuilder.markThinkingStart()
       }
     }
     this.stateValue = { ...this.stateValue, ...nextPatch }
@@ -574,18 +514,9 @@ export class AppController {
 }
 
 function parseArguments(value: string): unknown {
-  try { return JSON.parse(value) } catch { return {} }
-}
-
-function historyToTranscript(entry: HistoryEntry): TranscriptItem {
-  if (entry.kind === "user" || entry.kind === "assistant" || entry.kind === "diagnostic") {
-    return { kind: entry.kind, text: entry.text }
+  try { return JSON.parse(value) } catch {
+    // Malformed arguments still carry risk signal: expose the raw text as the
+    // command so destructive-pattern classification keeps working.
+    return { command: value }
   }
-  if (entry.kind === "tool-call") {
-    return { kind: "tool-call", name: entry.name, arguments: entry.arguments }
-  }
-  if (entry.kind === "tool-result") {
-    return { kind: "tool-result", name: entry.name, text: entry.text, isError: entry.isError }
-  }
-  return { kind: "diagnostic", text: entry.text }
 }
