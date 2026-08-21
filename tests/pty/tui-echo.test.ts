@@ -8,7 +8,7 @@ describe("real Echo TUI", () => {
     try {
       await terminal.waitForText("Welcome back!")
       await terminal.waitForText("Quick actions")
-      expect(terminal.screenText()).toContain("▗████████▙▖")
+      expect(terminal.screenText()).toContain("▗█████████▙▖")
       expect(terminal.screenText()).toContain("Tips for getting started")
       expect(terminal.screenText()).toContain("Quick actions")
       expect(terminal.screenText()).toContain("deepseek-v4-flash")
@@ -22,7 +22,7 @@ describe("real Echo TUI", () => {
       await terminal.waitForText("ready", 2_000, promptStart)
       await new Promise((resolve) => setTimeout(resolve, 100))
       expect(terminal.screenText()).toContain("Welcome back!")
-      expect(terminal.screenText()).toContain("▗████████▙▖")
+      expect(terminal.screenText()).toContain("▗█████████▙▖")
       expect(terminal.screenText()).toContain("[echo] hello")
 
       const statusStart = terminal.rawLength()
@@ -167,7 +167,7 @@ describe("real Echo TUI", () => {
     }
   }, 15_000)
 
-  it("lets the compact identity naturally scroll away in a long conversation", async () => {
+  it("lets the complete welcome naturally scroll away in a long conversation", async () => {
     const terminal = spawnTui(["src/main.ts", "--echo", "--motion", "off"], { cols: 80, rows: 12 })
     try {
       await terminal.waitForText("DeepSeek Harness")

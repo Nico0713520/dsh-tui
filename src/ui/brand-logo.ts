@@ -12,12 +12,12 @@ export type WhalePixelTier = "full" | "compact"
 
 const WHALE_PIXELS: Record<WhalePixelTier, readonly string[]> = {
   full: [
-    " ▗▄▄▟▄██▘ ▐▙▄ ▄▄",
-    "▗████████▙▖▜███▀",
-    "█▘ ▀▀████▀███▌",
-    "█▙    ▀██▙▟█▛",
-    "▝▜▙▖ ▗▄▝▜██▛",
-    "  ▀▜█████▀▀▀▘",
+    "  ▄▄▄▙▄██▌  █▄▖▗▄▄",
+    "▗█████████▙▖▀████▀",
+    "█▌ ▝▀▀████▛████",
+    "▜▙     ▀██▙▄██▛",
+    "▝▜█▄  ▄▄▝▜███▘",
+    "  ▝▀██████▀▀▀▀",
   ],
   compact: [
     " ▄▟███▖ █▄▄▄",
@@ -63,7 +63,7 @@ export function createBrandLogo(options: {
       readBase64(options.assetPath),
       "image/png",
       { fallbackColor: (text) => options.theme.fg("brand", text) },
-      { maxWidthCells: full ? 16 : 12, maxHeightCells: full ? 6 : 5 },
+      { maxWidthCells: full ? 18 : 12, maxHeightCells: full ? 6 : 5 },
       { widthPx: 63, heightPx: 46 },
     )
   } catch {

@@ -26,6 +26,7 @@ describe("Claude-style welcome card", () => {
     expect(lines.length).toBeLessThanOrEqual(11)
     expect(plain).toContain("╭─ DeepSeek Harness  v0.1.0")
     expect(plain).toContain("Welcome back!")
+    expect(plain).toContain("▗█████████▙▖▀████▀")
     expect(plain).toContain("Tips for getting started")
     expect(plain).toContain("Quick actions")
     expect(plain).toContain("deepseek-v4-flash · ready")

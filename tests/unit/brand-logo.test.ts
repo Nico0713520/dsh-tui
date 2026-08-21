@@ -39,12 +39,12 @@ describe("official DeepSeek whale", () => {
 
   it("uses stable solid block samples of the official silhouette", () => {
     expect(whalePixelArt("full")).toEqual([
-      " ▗▄▄▟▄██▘ ▐▙▄ ▄▄",
-      "▗████████▙▖▜███▀",
-      "█▘ ▀▀████▀███▌",
-      "█▙    ▀██▙▟█▛",
-      "▝▜▙▖ ▗▄▝▜██▛",
-      "  ▀▜█████▀▀▀▘",
+      "  ▄▄▄▙▄██▌  █▄▖▗▄▄",
+      "▗█████████▙▖▀████▀",
+      "█▌ ▝▀▀████▛████",
+      "▜▙     ▀██▙▄██▛",
+      "▝▜█▄  ▄▄▝▜███▘",
+      "  ▝▀██████▀▀▀▀",
     ])
     expect(whalePixelArt("compact")).toEqual([
       " ▄▟███▖ █▄▄▄",
@@ -55,7 +55,7 @@ describe("official DeepSeek whale", () => {
     ])
     expect(whalePixelArt("full")).toHaveLength(6)
     expect(whalePixelArt("compact")).toHaveLength(5)
-    expect(whalePixelArt("full").every((line) => visibleWidth(line) <= 16)).toBe(true)
+    expect(whalePixelArt("full").every((line) => visibleWidth(line) <= 18)).toBe(true)
     expect(whalePixelArt("compact").every((line) => visibleWidth(line) <= 12)).toBe(true)
     expect(whalePixelArt("full").join("\n")).not.toMatch(/[\u2800-\u28ff]/u)
   })
