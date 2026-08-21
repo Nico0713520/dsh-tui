@@ -29,10 +29,15 @@ export class ThemeCanvas extends Container {
   }
 
   render(width: number): string[] {
-    const rendered = super.render(width)
-    if (this.theme.canvasBackground === null) return rendered
+    const safeWidth = Math.max(1, width)
+    const rendered = super.render(safeWidth)
+    if (this.theme.canvasBackground === null) {
+      // Width guard: even without a painted canvas, no child line may exceed
+      // the terminal width (pi-tui crashes on over-wide lines in some paths).
+      return rendered.map((line) => truncateToWidth(line, safeWidth, ""))
+    }
     const minimumRows = Math.max(0, this.rows())
     while (rendered.length < minimumRows) rendered.push("")
-    return rendered.map((line) => paintFullWidth(line, width, this.theme))
+    return rendered.map((line) => paintFullWidth(line, safeWidth, this.theme))
   }
 }
