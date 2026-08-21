@@ -28,6 +28,15 @@ function createScreen(columns: number, rows: number): ScreenBuffer {
     const start = Math.min(width, cursorColumn)
     for (let column = start; column < width; column += 1) cells[cursorRow]![column] = " "
   }
+  const advanceRow = () => {
+    if (cursorRow < height - 1) {
+      cursorRow += 1
+      return
+    }
+    cells.shift()
+    cells.push(Array.from({ length: width }, () => " "))
+    cursorRow = height - 1
+  }
   const applyCsi = (params: string, final: string) => {
     const privateMode = params.startsWith("?")
     const values = params.replace(/^\?/, "").split(";").map((value) => Number.parseInt(value || "0", 10))
@@ -81,13 +90,13 @@ function createScreen(columns: number, rows: number): ScreenBuffer {
           continue
         }
         if (character === "\r") cursorColumn = 0
-        else if (character === "\n") cursorRow = Math.min(height - 1, cursorRow + 1)
+        else if (character === "\n") advanceRow()
         else if (character === "\b") cursorColumn = Math.max(0, cursorColumn - 1)
         else if (character >= " ") {
           const cellWidth = Math.max(1, visibleWidth(character))
-          if (cursorColumn + cellWidth > width) {
+          if (cursorColumn >= width || cursorColumn + cellWidth > width) {
             cursorColumn = 0
-            cursorRow = Math.min(height - 1, cursorRow + 1)
+            advanceRow()
           }
           if (cursorRow >= 0 && cursorRow < height && cursorColumn < width) {
             cells[cursorRow]![cursorColumn] = character
@@ -96,10 +105,6 @@ function createScreen(columns: number, rows: number): ScreenBuffer {
             }
           }
           cursorColumn += cellWidth
-          if (cursorColumn >= width) {
-            cursorColumn = 0
-            cursorRow = Math.min(height - 1, cursorRow + 1)
-          }
         }
         clamp()
       }
@@ -127,12 +132,15 @@ export function spawnTui(
 ): PtyHarness {
   const columns = options.cols ?? 80
   const rows = options.rows ?? 24
+  const environment = Object.fromEntries(
+    Object.entries({ ...process.env, ...options.env }).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  )
   const terminal = spawn(process.execPath, [...args], {
     name: "xterm-256color",
     cols: columns,
     rows,
     cwd: options.cwd ?? process.cwd(),
-    env: { ...process.env, ...options.env },
+    env: environment,
     encoding: "utf8",
   })
   const screen = createScreen(columns, rows)
