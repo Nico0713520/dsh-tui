@@ -16,11 +16,16 @@ export function paintFullWidth(line: string, width: number, theme: UiTheme): str
 }
 
 export class ThemeCanvas extends Container {
+  private readonly rows: () => number
+  private readonly theme: UiTheme
+
   constructor(
-    private readonly rows: () => number,
-    private readonly theme: UiTheme,
+    rows: () => number,
+    theme: UiTheme,
   ) {
     super()
+    this.rows = rows
+    this.theme = theme
   }
 
   render(width: number): string[] {

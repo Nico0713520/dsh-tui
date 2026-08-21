@@ -6,11 +6,12 @@ import {
   ScrollView,
   Text,
   TuiMainScreen,
+  getCapabilities,
   matchesKey,
   truncateToWidth,
   visibleWidth,
-  type Component,
   type EditorTheme,
+  type TerminalCapabilities,
   type TUI,
 } from "@earendil-works/pi-tui"
 import type { ApprovalRequest, AppState, ControllerView, HistoryChoice, TranscriptItem } from "../controller.ts"
@@ -23,9 +24,9 @@ import { createUiTheme, toolSummary, type UiTheme } from "./theme.ts"
 import { ThemeCanvas } from "./theme-canvas.ts"
 import { showModalList } from "./modal-list.ts"
 import { createStreamingMarkdownView } from "./streaming-markdown.ts"
-import { DeepPulseClock, ElapsedClock, deepPulseFrame, type DeepPulseTick } from "./deep-pulse.ts"
+import { DeepPulseClock, ElapsedClock, type DeepPulseTick } from "./deep-pulse.ts"
 import { LatestRenderGate, type DrainSource } from "./render-backpressure.ts"
-import { shouldExpandWelcome, welcomePanelText } from "./welcome-panel.ts"
+import { shouldExpandWelcome, WelcomeTranscriptComponent } from "./welcome-panel.ts"
 
 export interface ViewActions {
   onSubmit(text: string): void
@@ -144,29 +145,6 @@ class PaintAwareContainer extends Container {
   }
 }
 
-class AdaptiveText implements Component {
-  private readonly text = new Text("", 1, 1)
-  private lastText = ""
-  private readonly content: (width: number) => string
-
-  constructor(content: (width: number) => string) {
-    this.content = content
-  }
-
-  render(width: number): string[] {
-    const next = this.content(Math.max(1, width - 2))
-    if (next !== this.lastText) {
-      this.lastText = next
-      this.text.setText(next)
-    }
-    return this.text.render(width)
-  }
-
-  invalidate(): void {
-    this.text.invalidate()
-  }
-}
-
 export class AppView implements ControllerView {
   readonly terminal = new ProcessTerminal()
   readonly tui: TUI = new TuiMainScreen(this.terminal)
@@ -175,7 +153,7 @@ export class AppView implements ControllerView {
   private readonly partialAssistant: ReturnType<typeof createStreamingMarkdownView>
   private readonly scroller = new ScrollView(this.transcript, { follow: "end" })
   private readonly canvas: ThemeCanvas
-  private readonly header: AdaptiveText
+  private readonly welcome: WelcomeTranscriptComponent
   private readonly status = new Text("")
   private readonly editor: Editor
   private actions: ViewActions | null = null
@@ -208,6 +186,8 @@ export class AppView implements ControllerView {
     color?: boolean
     tty?: boolean
     output?: DrainSource
+    brandAssetPath: string | URL
+    capabilities?: TerminalCapabilities
   }) {
     this.mode = options.mode
     this.model = options.model
@@ -221,10 +201,23 @@ export class AppView implements ControllerView {
       markdown: (text) => new Markdown(text, 1, 0, this.theme.markdown),
     })
     this.canvas = new ThemeCanvas(() => this.terminal.rows, this.theme)
-    this.header = new AdaptiveText((width) => this.headerContent(width))
+    this.welcome = new WelcomeTranscriptComponent({
+      expanded: true,
+      capabilities: options.capabilities ?? getCapabilities(),
+      assetPath: options.brandAssetPath,
+      columns: this.terminal.columns,
+      tick: this.pulseTick,
+      motion: this.motion,
+      tty: this.tty,
+      model: this.model,
+      cwd: this.cwd,
+      phase: "starting",
+      sessionId: null,
+      theme: this.theme,
+    })
     this.pulseClock = new DeepPulseClock(this.motion, (tick) => {
       this.pulseTick = tick
-      this.updateHeader()
+      this.updateWelcome()
       this.tui.requestRender()
     })
     this.elapsedClock = new ElapsedClock((seconds) => {
@@ -239,9 +232,9 @@ export class AppView implements ControllerView {
       selectList: this.theme.select,
     }
     this.editor = new Editor(this.tui, editorTheme)
+    this.transcript.addChild(this.welcome)
     this.transcript.addChild(this.committedTranscript)
     this.transcript.addChild(this.partialAssistant.element)
-    this.canvas.addChild(this.header)
     this.canvas.addChild(this.scroller)
     this.canvas.addChild(this.editor)
     this.canvas.addChild(this.status)
@@ -332,7 +325,7 @@ export class AppView implements ControllerView {
     }
     this.renderedTranscript = [...state.transcript]
     this.partialAssistant.setText(sanitizeTerminalText(state.partialAssistantText))
-    this.updateHeader()
+    this.updateWelcome()
     this.updateStatus()
     const committedLiveText = Boolean(previous?.partialAssistantText) && !state.partialAssistantText
     if (!previous?.partialAssistantText && state.partialAssistantText) this.transcript.markPending()
@@ -418,31 +411,21 @@ export class AppView implements ControllerView {
     return undefined
   }
 
-  private headerContent(columns: number): string {
-    if (this.currentState && shouldExpandWelcome(this.currentState)) {
-      return welcomePanelText({
-        columns,
-        tick: this.pulseTick,
-        motion: this.motion,
-        tty: this.tty,
-        model: this.model,
-        cwd: this.cwd,
-        phase: this.currentState.phase,
-        sessionId: this.currentState.sessionId,
-      })
-    }
-    const brand = deepPulseFrame({
-      columns,
-      frame: this.pulseTick.frame,
+  private updateWelcome(): void {
+    const state = this.currentState
+    this.welcome.update({
+      expanded: state ? shouldExpandWelcome(state) : true,
+      columns: this.terminal.columns,
+      tick: this.pulseTick,
       motion: this.motion,
       tty: this.tty,
-      completion: this.pulseTick.completion,
+      model: this.model,
+      cwd: this.cwd,
+      phase: state?.phase ?? "starting",
+      sessionId: state?.sessionId ?? null,
+      theme: this.theme,
     })
-    return headerText(columns, brand)
-  }
-
-  private updateHeader(): void {
-    this.header.invalidate()
+    this.welcome.invalidate()
   }
 
   private updateStatus(): void {

@@ -43,7 +43,7 @@ describe("real ACP TUI", () => {
       rows: 24,
     })
     try {
-      await terminal.waitForText("DeepSeek Harness in your terminal")
+      await terminal.waitForText("DeepSeek Harness")
       await terminal.waitForText("starting")
       terminal.write("first\r")
       await terminal.waitForText("queued")
@@ -173,7 +173,7 @@ describe("real ACP TUI", () => {
       await terminal.waitForText("+ New session", 8_000, newSessionStart)
       terminal.write("\r")
       await terminal.waitForText("fake-002", 8_000, newSessionStart)
-      await terminal.waitForText("DeepSeek Harness in your terminal", 8_000, newSessionStart)
+      await terminal.waitForText("DeepSeek Harness", 8_000, newSessionStart)
       terminal.write("\u0003\u0003")
       await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
     } finally {

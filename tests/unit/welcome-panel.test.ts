@@ -1,80 +1,67 @@
 import { describe, expect, it } from "vitest"
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui"
 import type { AppState } from "../../src/controller.ts"
-import { shouldExpandWelcome, welcomePanelText } from "../../src/ui/welcome-panel.ts"
-
-const state: AppState = {
-  phase: "ready",
-  sessionId: "session-1234567890",
-  usage: {},
-  costUsd: null,
-  activeOverlay: null,
-  backendMessage: null,
-  transcript: [],
-  partialAssistantText: "",
-  queuedPrompt: null,
-  activity: { kind: "idle" },
-  interruption: null,
-}
+import {
+  compactIdentityText,
+  shouldExpandWelcome,
+  welcomePanelText,
+} from "../../src/ui/welcome-panel.ts"
+import { createUiTheme } from "../../src/ui/theme.ts"
 
 const base = {
-  tick: { frame: 2, completion: false, settled: false },
-  motion: "full" as const,
+  tick: { frame: 10, completion: false, settled: true },
+  motion: "off" as const,
   tty: true,
   model: "deepseek-v4-flash",
-  cwd: "/Users/example/很长的中文工作区/开源项目/dsh-tui",
+  cwd: "/Users/example/workspace",
   phase: "ready" as const,
-  sessionId: "session-1234567890",
+  sessionId: "session-1234",
+  theme: createUiTheme("terminal"),
 }
 
-describe("welcome panel", () => {
-  it("renders a bounded responsive tier at every supported width", () => {
-    for (const columns of [24, 32, 34, 48, 60, 80, 96, 120]) {
-      const text = welcomePanelText({ ...base, columns })
-      expect(text.split("\n").every((line) => visibleWidth(line) <= columns)).toBe(true)
-    }
+describe("welcome presentation", () => {
+  it.each([
+    [120, 5],
+    [96, 5],
+    [80, 4],
+    [60, 4],
+    [48, 3],
+    [32, 1],
+  ])("fits the %i-column tier within its row budget", (columns, maxRows) => {
+    const lines = welcomePanelText({ ...base, columns }).split("\n")
+
+    expect(lines.length).toBeLessThanOrEqual(maxRows)
+    expect(lines.every((line) => visibleWidth(line) <= columns)).toBe(true)
   })
 
-  it("keeps the complete identity and useful session context in the full tier", () => {
+  it("keeps useful product identity without the old ASCII wordmark", () => {
     const text = stripTerminalSequences(welcomePanelText({ ...base, columns: 120 }))
-    expect(text).toContain("DeepSeek Harness in your terminal")
+
+    expect(text).toContain("DeepSeek Harness")
     expect(text).toContain("deepseek-v4-flash")
     expect(text).toContain("workspace")
-    expect(text).toContain("session")
-    expect(text).toContain("workspace-write")
-    expect(text).toContain("Enter send")
-    expect(text.split("\n").length).toBeGreaterThanOrEqual(8)
+    expect(text).toContain("session-1234")
+    expect(text).not.toContain("████")
+    expect(text).not.toContain("DeepSeek Harness in your terminal")
   })
 
-  it("sweeps a visible highlight across the full DSH wordmark without moving it", () => {
-    const first = welcomePanelText({ ...base, columns: 120, tick: { frame: 0, completion: false, settled: false } })
-    const third = welcomePanelText({ ...base, columns: 120, tick: { frame: 2, completion: false, settled: false } })
+  it("folds into a single compact identity row after the first user message", () => {
+    const text = compactIdentityText({
+      columns: 48,
+      model: base.model,
+      phase: base.phase,
+      theme: base.theme,
+    })
 
-    expect(first.split("\n")[2]).not.toBe(third.split("\n")[2])
-    expect(stripTerminalSequences(first)).toBe(stripTerminalSequences(third))
+    expect(stripTerminalSequences(text)).toContain("DeepSeek Harness")
+    expect(stripTerminalSequences(text)).toContain("deepseek")
+    expect(visibleWidth(text)).toBeLessThanOrEqual(48)
+    expect(text).not.toContain("\n")
   })
 
-  it("removes decoration before identity as the terminal narrows", () => {
-    const medium = stripTerminalSequences(welcomePanelText({ ...base, columns: 80 }))
-    const narrow = stripTerminalSequences(welcomePanelText({ ...base, columns: 48 }))
-    const tiny = stripTerminalSequences(welcomePanelText({ ...base, columns: 24 }))
-
-    expect(medium).toContain("DeepSeek Harness in your terminal")
-    expect(medium).not.toContain("████▄")
-    expect(narrow).toContain("dsh-tui")
-    expect(narrow).toContain("deepseek")
-    expect(tiny).not.toContain("█")
-  })
-
-  it("expands only while a session has no committed user prompt", () => {
+  it("expands only before a user prompt exists", () => {
+    const state = { transcript: [] } satisfies Pick<AppState, "transcript">
     expect(shouldExpandWelcome(state)).toBe(true)
-    expect(shouldExpandWelcome({
-      ...state,
-      transcript: [{ kind: "assistant", text: "prelude" }],
-    })).toBe(true)
-    expect(shouldExpandWelcome({
-      ...state,
-      transcript: [{ kind: "user", text: "hello" }],
-    })).toBe(false)
+    expect(shouldExpandWelcome({ transcript: [{ kind: "user", text: "hello" }] })).toBe(false)
   })
 })

@@ -6,14 +6,15 @@ describe("real Echo TUI", () => {
   it("shows the complete welcome immediately and folds it after the first prompt", async () => {
     const terminal = spawnTui(["src/main.ts", "--echo", "--motion", "off"], { cols: 120, rows: 30 })
     try {
-      await terminal.waitForText("DeepSeek Harness in your terminal")
+      await terminal.waitForText("DeepSeek Harness")
+      expect(terminal.screenText()).toContain("⢀⣴⣶")
       expect(terminal.screenText()).toContain("workspace-write")
       expect(terminal.screenText()).toContain("deepseek-v4-flash")
 
       terminal.write("hello\r")
       await terminal.waitForText("[echo] hello")
-      expect(terminal.screenText()).not.toContain("DeepSeek Harness in your terminal")
-      expect(terminal.screenText()).toContain("dsh-tui")
+      expect(terminal.screenText()).not.toContain("⢀⣴⣶")
+      expect(terminal.screenText()).toContain("DeepSeek Harness")
 
       terminal.write("\u0003")
       await new Promise((resolve) => setTimeout(resolve, 50))
@@ -44,7 +45,7 @@ describe("real Echo TUI", () => {
         .map((line) => visibleWidth(line))
         .filter((width) => width > 32)
       expect(veryNarrowOverflow).toEqual([])
-      expect(terminal.screenText()).toContain("dsh-tui")
+      expect(terminal.screenText()).toContain("DeepSeek Harness")
       terminal.resize(48, 16)
 
       const noticeStart = terminal.rawLength()

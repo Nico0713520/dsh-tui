@@ -68,8 +68,19 @@ export function resolveDefaultBackendCommand(_config: AppConfig, platform: NodeJ
   ]
 }
 
+export function resolveBrandAsset(moduleUrl: string = import.meta.url): string {
+  return fileURLToPath(new URL("../assets/brand/deepseek-whale.png.base64", moduleUrl))
+}
+
 export async function runApp(config: AppConfig): Promise<number> {
-  const view = new AppView({ mode: config.mode, model: config.model, cwd: config.cwd, motion: config.motion, theme: config.theme })
+  const view = new AppView({
+    mode: config.mode,
+    model: config.model,
+    cwd: config.cwd,
+    motion: config.motion,
+    theme: config.theme,
+    brandAssetPath: resolveBrandAsset(),
+  })
   const logs = new SessionLogReader()
   let controller!: AppController
   let settled = false
