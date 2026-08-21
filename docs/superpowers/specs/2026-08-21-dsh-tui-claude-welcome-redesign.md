@@ -62,16 +62,20 @@ Layout rules:
 ## Whale artwork
 
 The checked-in official DeepSeek SVG remains the source of truth and must keep its
-recorded hash. The artwork is never recolored, distorted, animated, or replaced
-with an invented whale.
+recorded hash. The official SVG and PNG are never recolored, distorted, animated,
+or replaced with an invented whale. Text-terminal art is a separately documented
+low-resolution approximation of that source.
 
 ### Text-terminal renderer
 
 - Replace the current Braille strings with a deterministic solid quadrant-block
   raster sampled from the official SVG alpha mask.
-- The full fallback target is 16 columns by 6 terminal rows, equivalent to a
-  32×12 binary subpixel grid rendered with Unicode solid block elements.
-- Sampling preserves the official aspect ratio and centers the non-empty bounds.
+- The full fallback target is 18 columns by 6 terminal rows, equivalent to a
+  36×12 binary subpixel grid rendered with Unicode solid block elements.
+- The 18-column result is sampled directly from the official PNG alpha mask at a
+  fixed `0.35` coverage threshold. It is not stretched from the old 16-column
+  glyph. The two extra columns provide a slightly longer terminal silhouette
+  while retaining the six-row visual weight approved for the welcome card.
 - The eye and inner face separation must remain visible at the full tier. The
   tail, raised back, rounded body, and lower return stroke must read as one
   connected whale silhouette.
@@ -85,14 +89,14 @@ with an invented whale.
 ### Image-capable renderer
 
 - Kitty/iTerm2 continue to use the exact cached transparent official PNG.
-- The full image fits within 16×6 cells and the compact image within 12×5 cells,
+- The full image fits within 18×6 cells and the compact image within 12×5 cells,
   preserving aspect ratio.
 - Inline image and text fallback occupy the same layout box so capability changes
   do not alter the card composition.
 
 ## Responsive behavior
 
-- `>= 96` columns: framed two-column card, full 16×6 whale.
+- `>= 96` columns: framed two-column card, full 18×6 whale.
 - `72–95` columns: framed two-column card with a narrower left rail and compact
   12×5 whale; the right side keeps only one tip and one quick-action line.
 - `48–71` columns: framed single-column card. Centered compact whale, product
@@ -101,15 +105,19 @@ with an invented whale.
   otherwise product name, model, and Enter hint.
 - `< 34` columns: the existing one-line text identity. No partial art.
 
-No breakpoint may produce half borders, clipped wide glyphs, orphan divider
-segments, or more than nine welcome rows at 120×30.
+No breakpoint may produce half borders, clipped wide glyphs, or orphan divider
+segments. The existing 120×30 card height remains unchanged.
 
 ## Lifecycle
 
 - The complete card appears immediately while the backend/session initializes.
 - Startup remains editable; the visual does not delay focus or first input.
-- On the first submitted message, the entire framed card becomes one compact
-  identity row inside the transcript.
+- The complete card remains the first item in the transcript after submission.
+  User and assistant messages are appended below it; the card is never replaced
+  by a compact identity row.
+- The end-following scroll view moves the unchanged card upward only when the
+  growing conversation needs the space. It eventually leaves the viewport by
+  natural scrolling, matching the observed Claude Code behavior.
 - A new session restores the complete card. History replay does not duplicate it.
 - The whale itself is static. Existing optional motion may accent only the title
   divider or readiness label and must stop as soon as the user types.
@@ -122,8 +130,9 @@ The implementation is verified only through stable public rendering seams:
    glyph rows derived from the official asset.
 2. `WelcomeTranscriptComponent.render(width)` verifies the framed wide/medium/
    stacked/text layouts and terminal-cell bounds.
-3. Real PTY tests verify startup output, immediate input, first-message collapse,
-   `NO_COLOR`, and clean resize across 120, 80, 60, 48, and 32 columns.
+3. Real PTY tests verify startup output, immediate input, first-message retention,
+   natural long-conversation scrolling, `NO_COLOR`, and clean resize across 120,
+   80, 60, 48, and 32 columns.
 4. The existing asset-hash test proves the official SVG and PNG cache did not
    change.
 
@@ -140,7 +149,8 @@ product.
   than like a table of runtime metadata.
 - At 80 columns the card remains structured; at 48 and 32 columns it degrades
   cleanly without overflow.
-- After the first prompt, normal conversation has no persistent large logo/card.
+- After the first prompt, the unchanged card remains above the first exchange and
+  disappears only after enough conversation has naturally scrolled it away.
 - All automated checks, package checks, and installed TTY smoke tests pass.
 
 ## Out of scope
