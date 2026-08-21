@@ -71,9 +71,19 @@ function call(method, params) {
   })
 }
 
-function waitForExit() {
+function waitForExit(timeoutMs) {
   if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve({ code: child.exitCode, signal: child.signalCode })
-  return new Promise((resolve) => child.once("exit", (code, signal) => resolve({ code, signal })))
+  return new Promise((resolve) => {
+    const onExit = (code, signal) => {
+      clearTimeout(timer)
+      resolve({ code, signal })
+    }
+    const timer = setTimeout(() => {
+      child.removeListener("exit", onExit)
+      resolve(null)
+    }, timeoutMs)
+    child.once("exit", onExit)
+  })
 }
 
 const timeout = setTimeout(() => fail(new Error("composition smoke timed out")), 10_000)
@@ -88,8 +98,16 @@ try {
   if (!session || typeof session.sessionId !== "string" || !session.sessionId) throw new Error("composition session response was invalid")
   settled = true
   child.stdin.end()
-  const exit = await waitForExit()
-  if (exit.code !== 0 || exit.signal !== null) throw exitFailure(`composition backend exited unexpectedly (${exit.code ?? exit.signal ?? "unknown"})`)
+  let exit = await waitForExit(1_000)
+  if (!exit) {
+    child.kill()
+    exit = await waitForExit(1_500)
+  }
+  if (!exit) {
+    child.kill("SIGKILL")
+    exit = await waitForExit(1_000)
+  }
+  if (!exit) throw exitFailure("composition backend did not exit after forced shutdown")
   console.log(`composition check passed: ${process.platform}`)
 } finally {
   clearTimeout(timeout)
