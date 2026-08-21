@@ -30,8 +30,9 @@ export function toolCardText(item: ToolItem, options: ToolCardOptions): string {
   const args = item.arguments ?? "{}"
   const summary = toolSummary(item.name, args, Math.max(8, columns - 2))
   if (item.kind === "tool-call") {
+    const marker = options.theme.fg("accent", "◌")
     return paintRow(
-      `${options.theme.fg("accent", "◌")} ${options.theme.fg("muted", summary)}`,
+      `${options.frame % 4 === 0 ? options.theme.strong(marker) : marker} ${options.theme.fg("muted", summary)}`,
       columns,
       "toolPending",
       options.theme,

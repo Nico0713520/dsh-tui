@@ -24,7 +24,7 @@ import { createUiTheme, type UiTheme } from "./theme.ts"
 import { ThemeCanvas } from "./theme-canvas.ts"
 import { showModalList } from "./modal-list.ts"
 import { createStreamingMarkdownView } from "./streaming-markdown.ts"
-import { DeepPulseClock, ElapsedClock, type DeepPulseTick } from "./deep-pulse.ts"
+import { ElapsedClock, VisualClock, type DeepPulseTick } from "./deep-pulse.ts"
 import { LatestRenderGate, type DrainSource } from "./render-backpressure.ts"
 import { shouldExpandWelcome, WelcomeTranscriptComponent } from "./welcome-panel.ts"
 import {
@@ -132,7 +132,7 @@ export class AppView implements ControllerView {
   private readonly motion: MotionPreference
   private readonly tty: boolean
   private readonly theme: UiTheme
-  private readonly pulseClock: DeepPulseClock
+  private readonly pulseClock: VisualClock
   private readonly elapsedClock: ElapsedClock
   private readonly renderGate: LatestRenderGate<AppState>
   private pulseTick: DeepPulseTick = { frame: 0, completion: false, settled: false }
@@ -178,7 +178,7 @@ export class AppView implements ControllerView {
       sessionId: null,
       theme: this.theme,
     })
-    this.pulseClock = new DeepPulseClock(this.motion, (tick) => {
+    this.pulseClock = new VisualClock(this.motion, (tick) => {
       this.pulseTick = tick
       this.updateWelcome()
       this.updateActivity()
@@ -260,13 +260,21 @@ export class AppView implements ControllerView {
   }
 
   render(state: AppState): void {
-    const priority = state.phase === "ready" || state.phase === "failed" || state.phase === "closing"
+    const toolCompleted = this.currentState?.transcript.some((item, index) => (
+      item.kind === "tool-call" && state.transcript[index]?.kind === "tool-result"
+    )) ?? false
+    const priority = state.phase === "ready" || state.phase === "failed" || state.phase === "closing" || toolCompleted
     this.renderGate.submit(state, priority)
   }
 
   private renderState(state: AppState): void {
     const previous = this.currentState
     this.currentState = state
+    this.pulseClock.setActive(
+      state.phase === "working"
+      && (state.activity.kind === "thinking" || state.activity.kind === "responding" || state.activity.kind === "tool"),
+    )
+    this.pulseClock.setOccluded(state.activeOverlay !== null)
     const wasActive = previous?.phase === "working" || previous?.phase === "cancelling"
     const isActive = state.phase === "working" || state.phase === "cancelling"
     if (!wasActive && isActive) this.elapsedClock.start()
@@ -321,8 +329,13 @@ export class AppView implements ControllerView {
 
   async requestApproval(request: ApprovalRequest): Promise<PermissionDecision> {
     if (request.optionIds.length === 0) return { outcome: "cancelled" }
-    const selected = await showApprovalPanel(this.tui, request, this.theme)
-    return selected === null ? { outcome: "cancelled" } : { outcome: "selected", optionId: selected }
+    this.pulseClock.setOccluded(true)
+    try {
+      const selected = await showApprovalPanel(this.tui, request, this.theme)
+      return selected === null ? { outcome: "cancelled" } : { outcome: "selected", optionId: selected }
+    } finally {
+      this.pulseClock.setOccluded(false)
+    }
   }
 
   async chooseHistory(items: readonly SessionInfo[]): Promise<HistoryChoice> {
@@ -334,7 +347,9 @@ export class AppView implements ControllerView {
         description: singleLine(`${new Intl.DateTimeFormat(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(item.mtimeMs)} · read-only`, 60),
       })),
     ]
+    this.pulseClock.setOccluded(true)
     const selected = await showModalList(this.tui, "History", choices, Math.min(16, choices.length), this.theme)
+      .finally(() => this.pulseClock.setOccluded(false))
     if (selected === null) return { kind: "cancel" }
     return selected === "__new__" ? { kind: "new" } : { kind: "session", id: selected }
   }
@@ -450,6 +465,7 @@ export class AppView implements ControllerView {
   private openSessionPanel(): void {
     if (!this.currentState || this.tui.hasOverlay()) return
     const columns = Math.max(24, Math.floor(this.terminal.columns * 0.7) - 2)
+    this.pulseClock.setOccluded(true)
     showModalPanel(
       this.tui,
       "Session",
@@ -463,7 +479,10 @@ export class AppView implements ControllerView {
         columns,
       }),
       this.theme,
-      () => this.tui.requestRender(true),
+      () => {
+        this.pulseClock.setOccluded(false)
+        this.tui.requestRender(true)
+      },
     )
     this.tui.requestRender(true)
   }

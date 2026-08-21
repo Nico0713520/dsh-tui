@@ -41,6 +41,10 @@ export class DeepPulseClock {
   private frame = 10
   private settled = true
   private completionRequested = false
+  private completionPulse = false
+  private entrance = false
+  private active = false
+  private occluded = false
 
   constructor(motion: MotionPreference, onTick: (tick: DeepPulseTick) => void) {
     this.motion = motion
@@ -50,42 +54,61 @@ export class DeepPulseClock {
   start(): void {
     this.disposeTimer()
     this.completionRequested = false
+    this.completionPulse = false
     if (this.motion !== "full") {
       this.frame = 10
       this.settled = true
+      this.entrance = false
       this.onTick({ frame: this.frame, completion: false, settled: true })
       return
     }
     this.frame = 0
     this.settled = false
+    this.entrance = true
     this.onTick({ frame: this.frame, completion: false, settled: false })
-    this.timer = setInterval(() => {
-      this.frame += 1
-      if (this.frame >= 10) {
-        this.disposeTimer()
-        this.settled = true
-        this.onTick({ frame: 10, completion: false, settled: true })
-        return
-      }
-      this.onTick({ frame: this.frame, completion: false, settled: false })
-      if (this.completionRequested && this.frame >= 3) this.beginCompletionPulse()
-    }, 80)
-    this.timer.unref?.()
+    this.ensureTicker()
   }
 
   collapse(): void {
     if (this.settled && this.timer === null) return
     this.disposeTimer()
     this.completionRequested = false
+    this.completionPulse = false
+    this.entrance = false
     this.frame = 10
     this.settled = true
     this.onTick({ frame: this.frame, completion: false, settled: true })
+    if (this.active) this.ensureTicker()
+  }
+
+  setActive(active: boolean): void {
+    this.active = active
+    if (!active && !this.entrance && !this.completionPulse) this.disposeTimer()
+    else this.ensureTicker()
+  }
+
+  setOccluded(occluded: boolean): void {
+    if (this.occluded === occluded) return
+    this.occluded = occluded
+    if (occluded) {
+      this.disposeTimer()
+      return
+    }
+    if (this.completionPulse) {
+      this.completionPulse = false
+      this.frame = 10
+      this.settled = true
+      this.onTick({ frame: this.frame, completion: false, settled: true })
+    }
+    this.ensureTicker()
   }
 
   complete(): void {
     if (this.motion === "off") {
       this.disposeTimer()
       this.completionRequested = false
+      this.completionPulse = false
+      this.entrance = false
       this.frame = 10
       this.settled = true
       this.onTick({ frame: this.frame, completion: false, settled: true })
@@ -101,20 +124,59 @@ export class DeepPulseClock {
   private beginCompletionPulse(): void {
     this.disposeTimer()
     this.completionRequested = false
+    this.completionPulse = true
+    this.entrance = false
     this.frame = 0
     this.settled = false
     this.onTick({ frame: this.frame, completion: true, settled: false })
-    this.timer = setTimeout(() => {
-      this.timer = null
+    if (this.occluded) {
+      this.completionPulse = false
       this.frame = 10
       this.settled = true
       this.onTick({ frame: this.frame, completion: false, settled: true })
+      return
+    }
+    this.timer = setTimeout(() => {
+      this.timer = null
+      this.completionPulse = false
+      this.frame = 10
+      this.settled = true
+      this.onTick({ frame: this.frame, completion: false, settled: true })
+      this.ensureTicker()
     }, 160)
     this.timer.unref?.()
   }
 
   dispose(): void {
+    this.active = false
+    this.entrance = false
+    this.completionPulse = false
     this.disposeTimer()
+  }
+
+  private ensureTicker(): void {
+    if (this.motion !== "full" || this.occluded || this.completionPulse || this.timer !== null) return
+    if (!this.entrance && !this.active) return
+    this.timer = setInterval(() => {
+      if (this.entrance) {
+        this.frame += 1
+        if (this.frame >= 10) {
+          this.entrance = false
+          this.frame = 10
+          this.settled = true
+          this.onTick({ frame: this.frame, completion: false, settled: true })
+          if (!this.active) this.disposeTimer()
+          return
+        }
+        this.onTick({ frame: this.frame, completion: false, settled: false })
+        if (this.completionRequested && this.frame >= 3) this.beginCompletionPulse()
+        return
+      }
+      this.frame = (this.frame + 1) % 10
+      this.settled = true
+      this.onTick({ frame: this.frame, completion: false, settled: true })
+    }, 80)
+    this.timer.unref?.()
   }
 
   private disposeTimer(): void {
@@ -123,6 +185,9 @@ export class DeepPulseClock {
     this.timer = null
   }
 }
+
+/** Shared visual ticker used by welcome, activity, and pending tool accents. */
+export class VisualClock extends DeepPulseClock {}
 
 export class ElapsedClock {
   private readonly onTick: (seconds: number) => void

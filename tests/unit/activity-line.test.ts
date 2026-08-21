@@ -35,4 +35,12 @@ describe("activity line", () => {
       expect(visibleWidth(text)).toBeLessThanOrEqual(columns)
     }
   })
+
+  it("changes only emphasis between visual frames", () => {
+    const frames = [0, 1, 2, 3].map((frame) => stripTerminalSequences(activityLineText(
+      { kind: "thinking" },
+      { columns: 48, frame, elapsedSeconds: 2, theme },
+    )))
+    expect(new Set(frames).size).toBe(1)
+  })
 })

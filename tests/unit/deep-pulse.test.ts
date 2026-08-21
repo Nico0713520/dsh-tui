@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui"
-import { DeepPulseClock, ElapsedClock, deepPulseFrame } from "../../src/ui/deep-pulse.ts"
+import { DeepPulseClock, ElapsedClock, VisualClock, deepPulseFrame } from "../../src/ui/deep-pulse.ts"
 
 afterEach(() => {
   vi.useRealTimers()
@@ -73,6 +73,27 @@ describe("Deep Pulse", () => {
     off.complete()
     expect(vi.getTimerCount()).toBe(1)
     vi.runAllTimers()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("shares one visual timer and pauses it while overlays are occluded", () => {
+    vi.useFakeTimers()
+    const clock = new VisualClock("full", () => {})
+
+    clock.start()
+    clock.setActive(true)
+    expect(vi.getTimerCount()).toBe(1)
+    vi.advanceTimersByTime(1_000)
+    expect(vi.getTimerCount()).toBe(1)
+
+    clock.setOccluded(true)
+    expect(vi.getTimerCount()).toBe(0)
+    clock.setOccluded(false)
+    expect(vi.getTimerCount()).toBe(1)
+
+    clock.setActive(false)
+    expect(vi.getTimerCount()).toBe(0)
+    clock.dispose()
     expect(vi.getTimerCount()).toBe(0)
   })
 

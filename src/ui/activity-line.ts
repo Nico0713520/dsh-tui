@@ -30,8 +30,10 @@ export function activityLineText(
   else if (activity.kind === "approval") label = `Approval ${singleLine(activity.name, 24)}`
   else return ""
   const tone = activity.kind === "approval" ? "warning" : activity.kind === "boot" ? "muted" : "accent"
+  const marker = options.theme.fg(tone, "·")
+  const styledMarker = options.frame % 4 === 0 ? options.theme.strong(marker) : marker
   return truncateToWidth(
-    `${options.theme.fg(tone, "·")} ${options.theme.fg("muted", `${label}${elapsed}`)}`,
+    `${styledMarker} ${options.theme.fg("muted", `${label}${elapsed}`)}`,
     Math.max(1, options.columns),
     "…",
   )
