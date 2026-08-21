@@ -1,4 +1,4 @@
-import { createWriteStream } from "node:fs"
+import { createWriteStream, fstatSync } from "node:fs"
 import { Socket } from "node:net"
 import { createInterface } from "node:readline"
 
@@ -7,9 +7,29 @@ export const name = "dsh-tui-live-events"
 const MAX_TOOL_BYTES = 65_536
 const MAX_RECORD_BYTES = 1_048_576
 
+function livePipeDescriptorsAvailable() {
+  try {
+    fstatSync(3)
+    fstatSync(4)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function apply(ctx) {
-  const output = createWriteStream(null, { fd: 3, autoClose: false })
-  const controlInput = new Socket({ fd: 4, readable: true, writable: false })
+  if (!livePipeDescriptorsAvailable()) return
+
+  let output
+  let controlInput
+  try {
+    output = createWriteStream(null, { fd: 3, autoClose: false })
+    controlInput = new Socket({ fd: 4, readable: true, writable: false })
+  } catch {
+    output?.destroy()
+    controlInput?.destroy()
+    return
+  }
   controlInput.unref()
   const control = createInterface({ input: controlInput, crlfDelay: Infinity })
   const textFinals = new WeakMap()
