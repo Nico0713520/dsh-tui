@@ -16,8 +16,9 @@ export type AppActivity =
 
 export type TranscriptItem =
   | { kind: "user" | "assistant" | "diagnostic"; text: string }
+  | { kind: "thinking-trace"; durationMs: number }
   | { kind: "tool-call"; name: string; arguments: string }
-  | { kind: "tool-result"; name: string; text: string; isError: boolean }
+  | { kind: "tool-result"; name: string; arguments?: string; text: string; isError: boolean; durationMs?: number }
   | { kind: "history-boundary"; text: string }
 
 export interface AppState {
@@ -89,9 +90,16 @@ export class AppController {
   private committedAssistantText = ""
   private readonly seenToolStarts = new Set<string>()
   private readonly seenToolEnds = new Set<string>()
-  private readonly liveTools = new Map<string, { name: string; transcriptIndex: number }>()
+  private readonly liveTools = new Map<string, {
+    name: string
+    arguments: string
+    transcriptIndex: number
+    startedAtMs: number
+  }>()
   private readonly seenUsageSteps = new Set<string>()
   private readonly turnPerf = new TurnPerf()
+  private readonly now: () => number
+  private thinkingStartedAtMs: number | null = null
   private perfReported = false
   private stateValue: AppState = {
     phase: "starting",
@@ -112,11 +120,13 @@ export class AppController {
     backend: BackendPort
     logs: SessionLogPort
     view: ControllerView
+    now?: () => number
   }) {
     this.config = options.config
     this.backend = options.backend
     this.logs = options.logs
     this.view = options.view
+    this.now = options.now ?? Date.now
   }
 
   get state(): AppState {
@@ -344,7 +354,12 @@ export class AppController {
       if (!this.seenToolStarts.has(record.callId) && !this.seenToolEnds.has(record.callId)) {
         this.seenToolStarts.add(record.callId)
         const transcriptIndex = this.stateValue.transcript.length
-        this.liveTools.set(record.callId, { name: record.name, transcriptIndex })
+        this.liveTools.set(record.callId, {
+          name: record.name,
+          arguments: record.arguments,
+          transcriptIndex,
+          startedAtMs: this.now(),
+        })
         this.setState({
           partialAssistantText,
           activity,
@@ -365,8 +380,10 @@ export class AppController {
         const item: TranscriptItem = {
           kind: "tool-result",
           name: tool?.name ?? "tool",
+          ...(tool ? { arguments: tool.arguments } : {}),
           text: record.text,
           isError: record.isError,
+          ...(tool ? { durationMs: Math.max(0, this.now() - tool.startedAtMs) } : {}),
         }
         const transcript = [...this.stateValue.transcript]
         if (tool && transcript[tool.transcriptIndex]?.kind === "tool-call") transcript[tool.transcriptIndex] = item
@@ -445,15 +462,24 @@ export class AppController {
       this.seenToolStarts.add(event.callId)
       this.liveTools.set(event.callId, {
         name: event.name,
+        arguments: event.arguments,
         transcriptIndex: this.stateValue.transcript.length,
+        startedAtMs: this.now(),
       })
       this.setState({ transcript: [...this.stateValue.transcript, { kind: "tool-call", name: event.name, arguments: event.arguments }] })
     } else if (event.kind === "tool-result") {
       if (this.seenToolEnds.has(event.callId)) return
       this.seenToolEnds.add(event.callId)
       this.seenToolStarts.add(event.callId)
-      const item: TranscriptItem = { kind: "tool-result", name: event.name, text: event.text, isError: event.isError }
       const tool = this.liveTools.get(event.callId)
+      const item: TranscriptItem = {
+        kind: "tool-result",
+        name: event.name,
+        ...(tool ? { arguments: tool.arguments } : {}),
+        text: event.text,
+        isError: event.isError,
+        ...(tool ? { durationMs: Math.max(0, this.now() - tool.startedAtMs) } : {}),
+      }
       const transcript = [...this.stateValue.transcript]
       if (tool && transcript[tool.transcriptIndex]?.kind === "tool-call") transcript[tool.transcriptIndex] = item
       else transcript.push(item)
@@ -521,7 +547,24 @@ export class AppController {
   }
 
   private setState(patch: Partial<AppState>): void {
-    this.stateValue = { ...this.stateValue, ...patch }
+    let nextPatch = patch
+    if (patch.activity) {
+      const wasThinking = this.stateValue.activity.kind === "thinking"
+      const isThinking = patch.activity.kind === "thinking"
+      if (wasThinking && !isThinking && this.thinkingStartedAtMs !== null) {
+        const durationMs = Math.max(0, this.now() - this.thinkingStartedAtMs)
+        this.thinkingStartedAtMs = null
+        if (durationMs >= 250) {
+          const transcript = [...(patch.transcript ?? this.stateValue.transcript)]
+          const insertionIndex = Math.min(this.stateValue.transcript.length, transcript.length)
+          transcript.splice(insertionIndex, 0, { kind: "thinking-trace", durationMs })
+          nextPatch = { ...patch, transcript }
+        }
+      } else if (!wasThinking && isThinking) {
+        this.thinkingStartedAtMs = this.now()
+      }
+    }
+    this.stateValue = { ...this.stateValue, ...nextPatch }
     this.view.render(this.snapshot())
   }
 

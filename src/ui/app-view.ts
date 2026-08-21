@@ -33,6 +33,8 @@ import {
   renderHistoryBoundary,
   renderUserMessage,
 } from "./transcript-components.ts"
+import { activityLineText, thinkingTraceText } from "./activity-line.ts"
+import { ToolCardComponent, toolCardComponent } from "./tool-card.ts"
 
 export interface ViewActions {
   onSubmit(text: string): void
@@ -156,6 +158,7 @@ export class AppView implements ControllerView {
   readonly tui: TUI = new TuiMainScreen(this.terminal)
   private readonly transcript = new PaintAwareContainer(() => this.actions?.onLiveTextPaint())
   private readonly committedTranscript = new Container()
+  private readonly activeActivity = new Text("", 1, 0)
   private readonly partialAssistant: ReturnType<typeof createStreamingMarkdownView>
   private readonly scroller = new ScrollView(this.transcript, { follow: "end" })
   private readonly canvas: ThemeCanvas
@@ -181,6 +184,7 @@ export class AppView implements ControllerView {
   private readonly renderGate: LatestRenderGate<AppState>
   private pulseTick: DeepPulseTick = { frame: 0, completion: false, settled: false }
   private elapsedSeconds = 0
+  private toolDetailsExpanded = false
   private preparedToStop = false
 
   constructor(options: {
@@ -224,10 +228,15 @@ export class AppView implements ControllerView {
     this.pulseClock = new DeepPulseClock(this.motion, (tick) => {
       this.pulseTick = tick
       this.updateWelcome()
+      this.updateActivity()
+      for (const component of this.committedTranscript.children) {
+        if (component instanceof ToolCardComponent) component.setFrame(tick.frame)
+      }
       this.tui.requestRender()
     })
     this.elapsedClock = new ElapsedClock((seconds) => {
       this.elapsedSeconds = seconds
+      this.updateActivity()
       this.updateStatus()
       this.tui.requestRender()
     })
@@ -240,6 +249,7 @@ export class AppView implements ControllerView {
     this.editor = new Editor(this.tui, editorTheme)
     this.transcript.addChild(this.welcome)
     this.transcript.addChild(this.committedTranscript)
+    this.transcript.addChild(this.activeActivity)
     this.transcript.addChild(this.partialAssistant.element)
     this.canvas.addChild(this.scroller)
     this.canvas.addChild(this.editor)
@@ -314,7 +324,7 @@ export class AppView implements ControllerView {
     const canReuseRendered = state.transcript.length >= this.renderedTranscript.length
       && this.renderedTranscript.every((item, index) => item === state.transcript[index]
         || (item.kind === "tool-call" && state.transcript[index]?.kind === "tool-result"
-          && this.committedTranscript.children[index] instanceof Text))
+          && this.committedTranscript.children[index] instanceof ToolCardComponent))
     if (!canReuseRendered) {
       this.committedTranscript.clear()
       for (const item of state.transcript) this.addTranscriptItem(item)
@@ -323,8 +333,8 @@ export class AppView implements ControllerView {
         const previousItem = this.renderedTranscript[index]
         const nextItem = state.transcript[index]
         const component = this.committedTranscript.children[index]
-        if (previousItem !== nextItem && previousItem?.kind === "tool-call" && nextItem?.kind === "tool-result" && component instanceof Text) {
-          component.setText(toolResultText(nextItem, this.terminal.columns, this.theme))
+        if (previousItem !== nextItem && previousItem?.kind === "tool-call" && nextItem?.kind === "tool-result" && component instanceof ToolCardComponent) {
+          component.setItem(nextItem)
         }
       }
       for (const item of state.transcript.slice(this.renderedTranscript.length)) this.addTranscriptItem(item)
@@ -332,6 +342,7 @@ export class AppView implements ControllerView {
     this.renderedTranscript = [...state.transcript]
     this.partialAssistant.setText(sanitizeTerminalText(state.partialAssistantText))
     this.updateWelcome()
+    this.updateActivity()
     this.updateStatus()
     const committedLiveText = Boolean(previous?.partialAssistantText) && !state.partialAssistantText
     if (!previous?.partialAssistantText && state.partialAssistantText) this.transcript.markPending()
@@ -374,10 +385,14 @@ export class AppView implements ControllerView {
       this.committedTranscript.addChild(renderUserMessage(item.text, this.theme))
     } else if (item.kind === "assistant") {
       this.committedTranscript.addChild(renderAssistantMessage(item.text, this.theme))
-    } else if (item.kind === "tool-call") {
-      this.committedTranscript.addChild(new Text(`${this.theme.fg("muted", "⚙")} ${this.theme.fg("muted", toolSummary(item.name, item.arguments, this.terminal.columns))}`))
-    } else if (item.kind === "tool-result") {
-      this.committedTranscript.addChild(new Text(toolResultText(item, this.terminal.columns, this.theme)))
+    } else if (item.kind === "thinking-trace") {
+      this.committedTranscript.addChild(new Text(thinkingTraceText(item.durationMs, this.terminal.columns, this.theme), 0, 0))
+    } else if (item.kind === "tool-call" || item.kind === "tool-result") {
+      this.committedTranscript.addChild(toolCardComponent(item, {
+        expanded: this.toolDetailsExpanded,
+        frame: this.pulseTick.frame,
+        theme: this.theme,
+      }))
     } else if (item.kind === "history-boundary") {
       this.committedTranscript.addChild(renderHistoryBoundary(item.text, this.theme))
     } else {
@@ -406,6 +421,16 @@ export class AppView implements ControllerView {
       return { consume: true }
     }
     if (this.tui.hasOverlay()) return undefined
+    if (matchesKey(data, "ctrl+o")) {
+      this.toolDetailsExpanded = !this.toolDetailsExpanded
+      for (const component of this.committedTranscript.children) {
+        if (component instanceof ToolCardComponent) component.setExpanded(this.toolDetailsExpanded)
+      }
+      this.notice = this.toolDetailsExpanded ? "tool details expanded" : "tool details compact"
+      this.updateStatus()
+      this.tui.requestRender(true)
+      return { consume: true }
+    }
     if (matchesKey(data, "ctrl+r")) {
       actions.onHistory()
       return { consume: true }
@@ -442,5 +467,15 @@ export class AppView implements ControllerView {
       notice: this.notice,
       elapsedSeconds: this.elapsedSeconds,
     }, this.terminal.columns, this.theme))
+  }
+
+  private updateActivity(): void {
+    if (!this.currentState) return
+    this.activeActivity.setText(activityLineText(this.currentState.activity, {
+      columns: this.terminal.columns,
+      frame: this.pulseTick.frame,
+      elapsedSeconds: this.elapsedSeconds,
+      theme: this.theme,
+    }))
   }
 }

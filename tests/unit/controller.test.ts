@@ -15,7 +15,7 @@ const config: AppConfig = {
   perf: false,
 }
 
-function createHarness(configOverride: Partial<AppConfig> = {}) {
+function createHarness(configOverride: Partial<AppConfig> = {}, now: () => number = Date.now) {
   let promptResolve: ((value: { stopReason: string }) => void) | undefined
   let promptImpl: ((text: string) => Promise<{ stopReason: string }>) | undefined
   let listHistoryImpl: () => Promise<SessionInfo[]> = async () => []
@@ -79,7 +79,7 @@ function createHarness(configOverride: Partial<AppConfig> = {}) {
     logs,
     view,
     renders,
-    controller: new AppController({ config: { ...config, ...configOverride }, backend, logs, view }),
+    controller: new AppController({ config: { ...config, ...configOverride }, backend, logs, view, now }),
     promptCalls,
     cleanupOrder,
     setHistory(options: {
@@ -133,6 +133,52 @@ function createHarness(configOverride: Partial<AppConfig> = {}) {
 }
 
 describe("AppController", () => {
+  it("commits a truthful thinking duration when response begins", async () => {
+    let now = 1_000
+    const harness = createHarness({}, () => now)
+    harness.deferPrompt()
+    await harness.controller.start()
+    const prompt = harness.controller.submit("hello")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    now = 2_250
+    harness.controller.onAssistantText("Hi")
+    harness.finishPrompt()
+    await prompt
+
+    expect(harness.controller.state.transcript).toContainEqual({ kind: "thinking-trace", durationMs: 1_250 })
+  })
+
+  it("preserves tool target and measures its visible lifecycle", async () => {
+    let now = 10_000
+    const harness = createHarness({}, () => now)
+    harness.deferPrompt()
+    await harness.controller.start()
+    const prompt = harness.controller.submit("inspect")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    harness.controller.onLiveRecord({
+      v: 1, sessionId: "session-1", seq: 1, kind: "tool-start", turn: 1, step: 1,
+      callId: "call-1", name: "read_file", arguments: "{\"path\":\"src/app.ts\"}",
+    })
+    now = 10_875
+    harness.controller.onLiveRecord({
+      v: 1, sessionId: "session-1", seq: 2, kind: "tool-end", turn: 1, step: 1,
+      callId: "call-1", isError: false, text: "contents",
+    })
+
+    expect(harness.controller.state.transcript).toContainEqual({
+      kind: "tool-result",
+      name: "read_file",
+      arguments: "{\"path\":\"src/app.ts\"}",
+      text: "contents",
+      isError: false,
+      durationMs: 875,
+    })
+    harness.finishPrompt()
+    await prompt
+  })
+
   it("emits a sanitized performance report only when enabled", async () => {
     const harness = createHarness({ perf: true })
     harness.deferPrompt()
@@ -288,7 +334,14 @@ describe("AppController", () => {
     harness.logs.emit({ kind: "usage", turn: 1, step: 1, usage: { inputTokens: 10, outputTokens: 4, cacheReadTokens: 2 } })
 
     const toolItems = harness.controller.state.transcript.filter((item) => item.kind === "tool-call" || item.kind === "tool-result")
-    expect(toolItems).toEqual([{ kind: "tool-result", name: "read_file", text: "contents", isError: false }])
+    expect(toolItems).toEqual([{
+      kind: "tool-result",
+      name: "read_file",
+      arguments: "{\"path\":\"README.md\"}",
+      text: "contents",
+      isError: false,
+      durationMs: expect.any(Number),
+    }])
     expect(harness.controller.state.transcript.filter((item) => item.kind === "tool-result")).toHaveLength(1)
     expect(harness.controller.state.usage).toEqual({ inputTokens: 10, outputTokens: 4, cacheReadTokens: 2 })
     harness.finishPrompt()
@@ -339,7 +392,14 @@ describe("AppController", () => {
       usage: { inputTokens: 7, outputTokens: 2 },
     })
 
-    expect(harness.controller.state.transcript).toContainEqual({ kind: "tool-result", name: "read_file", text: "done", isError: false })
+    expect(harness.controller.state.transcript).toContainEqual({
+      kind: "tool-result",
+      name: "read_file",
+      arguments: "{}",
+      text: "done",
+      isError: false,
+      durationMs: expect.any(Number),
+    })
     expect(harness.controller.state.usage).toEqual({ inputTokens: 7, outputTokens: 2, cacheReadTokens: 0 })
   })
 
