@@ -56,7 +56,7 @@ export function createBrandLogo(options: {
   const full = options.columns >= 96
   const tier: WhalePixelTier = full ? "full" : "compact"
   if (mode === "pixel") {
-    return new Text(options.theme.fg("brand", whalePixelArt(tier).join("\n")))
+    return new Text(options.theme.fg("brand", whalePixelArt(tier).join("\n")), 0, 0)
   }
   try {
     return new Image(
@@ -67,6 +67,6 @@ export function createBrandLogo(options: {
       { widthPx: 63, heightPx: 46 },
     )
   } catch {
-    return new Text(options.theme.fg("brand", whalePixelArt(tier).join("\n")))
+    return new Text(options.theme.fg("brand", whalePixelArt(tier).join("\n")), 0, 0)
   }
 }
