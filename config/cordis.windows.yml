@@ -25,9 +25,6 @@
 - id: subprocess
   name: '@deepseek-ai/dsh-subprocess-local'
 
-- id: pwsh-local
-  name: '@deepseek-ai/dsh-pwsh-local'
-
 - id: pwsh
   name: '@deepseek-ai/dsh-pwsh-sandbox'
   config:

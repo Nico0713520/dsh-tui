@@ -1,6 +1,9 @@
 import { execFileSync } from "node:child_process"
 
-const raw = execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { encoding: "utf8" })
+const npmCli = process.env.npm_execpath
+const raw = npmCli
+  ? execFileSync(process.execPath, [npmCli, "pack", "--dry-run", "--json", "--ignore-scripts"], { encoding: "utf8" })
+  : execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { encoding: "utf8" })
 const report = JSON.parse(raw)
 const files = report[0]?.files ?? []
 const allowed = (name) => name === "package.json"

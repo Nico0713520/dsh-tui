@@ -8,10 +8,14 @@ import { ensurePtyHelper } from "./ensure-pty-helper.mjs"
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)))
 const temp = mkdtempSync(join(tmpdir(), "dsh-tui-install-"))
+const npmCli = process.env.npm_execpath
 ensurePtyHelper(root)
 
 function command(args) {
-  return execFileSync("npm", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
+  const options = { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+  return npmCli
+    ? execFileSync(process.execPath, [npmCli, ...args], options)
+    : execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", args, options)
 }
 
 async function echoSmoke(bin) {
