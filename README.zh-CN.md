@@ -103,7 +103,7 @@ dsh-tui theme terminal
 - Enter 发送编辑器内容。
 - Esc 中断正在运行的 prompt；有审批/历史弹窗时只关闭当前弹窗。
 - Ctrl+R 打开只读 History。
-- PageUp/PageDown 翻阅对话，Shift+↑/↓ 逐行滚动，Ctrl+End 回到底部并继续跟随新输出。
+- 使用鼠标滚轮或触控板翻阅终端原生对话历史。
 - Ctrl+O 只在本地切换工具输出的紧凑/展开视图，不会发送给模型。
 - `/status` 打开只读 Session 面板，只展示运行时可证实的信息。
 - Ctrl+C 连按两次退出；第一次会显示临时提示。

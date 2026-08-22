@@ -2,6 +2,22 @@ import { describe, expect, it } from "vitest"
 import { visibleWidth } from "@earendil-works/pi-tui"
 import { spawnTui } from "./pty-harness.ts"
 
+function expectFreshComposerNearWelcome(screen: string): void {
+  const rows = screen.split("\n")
+  const welcomeBottom = rows.findIndex((row) => row.startsWith("╰"))
+  const composerTop = rows.findIndex((row, index) => index > welcomeBottom && /^─{10}/u.test(row))
+
+  expect(welcomeBottom).toBeGreaterThanOrEqual(0)
+  expect(composerTop).toBeGreaterThan(welcomeBottom)
+  expect(composerTop - welcomeBottom).toBeLessThanOrEqual(2)
+}
+
+function expectNativeMouseScroll(raw: string): void {
+  for (const mode of [1000, 1002, 1003, 1006]) {
+    expect(raw).not.toContain(`\x1b[?${mode}h`)
+  }
+}
+
 describe("real Echo TUI", () => {
   it("shows the complete welcome immediately and keeps it above the first exchange", async () => {
     const terminal = spawnTui(["src/main.ts", "--echo", "--motion", "off"], { cols: 120, rows: 30 })
@@ -15,6 +31,8 @@ describe("real Echo TUI", () => {
       expect(terminal.screenText()).toContain("deepseek-v4-flash")
       expect(terminal.screenText()).not.toContain("workspace-write")
       expect(terminal.screenText()).not.toContain("approval ask")
+      expectFreshComposerNearWelcome(terminal.screenText())
+      expectNativeMouseScroll(terminal.raw())
 
       const promptStart = terminal.rawLength()
       terminal.write("hello\r")
@@ -201,15 +219,7 @@ describe("real Echo TUI", () => {
         await new Promise((resolve) => setTimeout(resolve, 100))
       }
       expect(terminal.screenText()).not.toContain("DeepSeek Harness")
-
-      const bottom = terminal.screenText()
-      terminal.write("\x1b[5~")
-      await new Promise((resolve) => setTimeout(resolve, 120))
-      expect(terminal.screenText()).not.toBe(bottom)
-      expect(terminal.screenText()).toMatch(/one|two/)
-
-      terminal.write("\x1b[1;5F")
-      await new Promise((resolve) => setTimeout(resolve, 120))
+      expectNativeMouseScroll(terminal.raw())
       const followStart = terminal.rawLength()
       terminal.write("five\r")
       await terminal.waitForText("[echo] five", 3_000, followStart)

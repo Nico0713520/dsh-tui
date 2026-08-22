@@ -36,7 +36,7 @@ Options:
   --version                      Show the version
 
 Keys:
-  Enter send · Esc interrupt · PgUp/PgDn scroll · Ctrl+End follow
+  Enter send · Esc interrupt · mouse wheel / trackpad scroll
   Ctrl+R history · Ctrl+O tool detail
   /status session panel · Ctrl+C twice exit
 `

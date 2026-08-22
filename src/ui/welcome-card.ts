@@ -78,7 +78,7 @@ function rightContent(
   if (row === dividerRow + 1) return theme.strong(theme.fg("brand", "Quick actions"))
   if (row === dividerRow + 2) return `${theme.fg("accent", "Enter")} send  ${theme.fg("muted", "·")}  ${theme.fg("accent", "Esc")} stop`
   if (row === dividerRow + 3 && rightWidth >= 30) {
-    return `${theme.fg("accent", "PgUp/PgDn")} scroll  ${theme.fg("muted", "·")}  ${theme.fg("accent", "Ctrl+R")} history`
+    return `${theme.fg("accent", "Wheel")} scroll  ${theme.fg("muted", "·")}  ${theme.fg("accent", "Ctrl+R")} history`
   }
   return ""
 }
