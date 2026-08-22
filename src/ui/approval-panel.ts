@@ -10,13 +10,8 @@ import {
   type TUI,
 } from "@earendil-works/pi-tui"
 import type { ApprovalRequest } from "../controller.ts"
+import { redactSensitiveText } from "../text.ts"
 import { createUiTheme, toolSummary, type ForegroundRole, type UiTheme } from "./theme.ts"
-
-function redactSensitive(value: string): string {
-  return value
-    .replace(/\bsk-[A-Za-z0-9_-]{6,}\b/gi, "[redacted]")
-    .replace(/((?:api[_-]?key|authorization|token)\s*[:=]\s*)[^\s,'"}]+/gi, "$1[redacted]")
-}
 
 function stakesTone(stakes: ApprovalRequest["stakes"]): ForegroundRole {
   if (stakes === "critical") return "error"
@@ -43,7 +38,7 @@ export function approvalPanelSummary(
   return [
     truncateToWidth(theme.strong(theme.fg(stakesTone(request.stakes), "Approval required")), width, "…"),
     row("Tool", request.name),
-    row("Action", redactSensitive(action)),
+    row("Action", redactSensitiveText(action)),
     row("Risk", request.stakes.toUpperCase()),
     row("Workspace", request.workspace),
   ].join("\n")

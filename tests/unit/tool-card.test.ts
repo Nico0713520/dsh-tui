@@ -51,6 +51,16 @@ describe("tool cards", () => {
     expect(rendered).not.toContain("\x1b[48;2;234;247;240m")
   })
 
+  it("never renders a credential returned by a tool", () => {
+    const rendered = toolCardText({
+      ...result,
+      text: "DEEPSEEK_API_KEY=sk-test-only-1234567890abcdef",
+    }, { columns: 80, expanded: true, frame: 0, theme })
+
+    expect(stripTerminalSequences(rendered)).toContain("DEEPSEEK_API_KEY=[redacted]")
+    expect(rendered).not.toContain("1234567890abcdef")
+  })
+
   it("animates only pending cards and reuses completed render output", () => {
     const pending = new ToolCardComponent(
       { kind: "tool-call", name: "read_file", arguments: result.arguments },

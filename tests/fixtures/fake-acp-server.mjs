@@ -229,6 +229,13 @@ input.on("line", (line) => {
     return
   }
 
+  if (scenario === "stderr-secret") {
+    process.stderr.write("Authorization: Bearer sk-test-only-1234567890abcdef\n")
+    assistant("safe")
+    result(frame.id, { stopReason: "end_turn" })
+    return
+  }
+
   if (scenario === "live-stream") {
     liveRecords([
       { v: 1, sessionId: activeSessionId, seq: 1, kind: "turn-start", turn: 1 },

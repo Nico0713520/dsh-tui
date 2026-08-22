@@ -183,6 +183,18 @@ describe("AcpClient", () => {
     await acp.close()
   })
 
+  it("redacts credentials written by the backend to stderr", async () => {
+    const events = createEvents()
+    const acp = client("stderr-secret", events)
+    await acp.newSession()
+    await expect(acp.prompt("probe")).resolves.toEqual({ stopReason: "end_turn" })
+    await waitFor(() => events.diagnostics.length > 0)
+
+    expect(events.diagnostics.join(" ")).toContain("Authorization: Bearer [redacted]")
+    expect(events.diagnostics.join(" ")).not.toContain("1234567890abcdef")
+    await acp.close()
+  })
+
   it("can detach the live reader before closing the ACP child", async () => {
     const events = createEvents()
     const acp = client("live-stream", events)
