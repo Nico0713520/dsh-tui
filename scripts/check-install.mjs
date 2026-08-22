@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { existsSync, mkdtempSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -7,6 +7,7 @@ import { spawn as spawnPty } from "node-pty"
 import { ensurePtyHelper } from "./ensure-pty-helper.mjs"
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)))
+const expectedVersion = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version
 const temp = mkdtempSync(join(tmpdir(), "dsh-tui-install-"))
 const npmCli = process.env.npm_execpath
 ensurePtyHelper(root)
@@ -75,7 +76,7 @@ try {
   const bin = join(temp, "node_modules", "@nico0713520", "dsh-tui", "bin", "dsh-tui.js")
   const version = execFileSync(process.execPath, [bin, "--version"], { encoding: "utf8" }).trim()
   const help = execFileSync(process.execPath, [bin, "--help"], { encoding: "utf8" })
-  if (version !== "dsh-tui 0.1.0") throw new Error(`unexpected installed version: ${version}`)
+  if (version !== `dsh-tui ${expectedVersion}`) throw new Error(`unexpected installed version: ${version}`)
   if (!help.includes("Usage:") || !help.includes("--echo")) throw new Error("installed help output is incomplete")
   if (process.platform === "win32") {
     const shim = join(temp, "node_modules", ".bin", "dsh-tui.cmd")

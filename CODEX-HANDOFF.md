@@ -1,84 +1,70 @@
-# dsh-tui v0.1.0 交接文档
+# dsh-tui v0.2.0 开发交接
 
-这份文档只记录仓库中已经实现并可由本地命令复核的事实。dsh-tui 是 DeepSeek Harness ACP 的 pi-tui 终端客户端，当前实现固定针对 dsh `0.1.0-rc.7`，没有依赖本机的 DSH 源码 checkout。
+dsh-tui 是一个社区维护的 DeepSeek Harness TUI，不是 DeepSeek 官方客户端。当前本地发布候选建立在 DSH `0.1.1-rc.2`、ACP 与 `@earendil-works/pi-tui` 之上；直接 DSH 依赖全部精确锁定到同一版本。
 
-## 已验证能力
+## 当前产品边界
 
-- `AcpClient` 负责 ACP initialize、真实 `session/new`、流式 `session/update`、单请求约束、无 id 的 `session/cancel` 通知、权限选择，以及已测试的关闭顺序：结束 stdin，等待退出；再发默认终止信号并等待；最后发 SIGKILL 并等待，仍未退出则报错。
-- 后端异常、超时和未知结果不会自动重放原 prompt；副作用请求必须由用户重新提交。
-- 权限选择严格限制在 ACP 提供的 option id 内；缺少、异常或非法选择一律取消。
-- `SessionLogReader` 按 project key 定位 JSONL，增量读取、保留半行和 split UTF-8，解析 tool call/result、工具错误和 usage，并支持只读历史列表/回放。
-- `AppController` 集中管理 startup、working、cancelling、failed、closing 状态、transcript、session、usage、cost、审批和历史边界；历史回放不会伪装为 ACP 恢复，新会话才会创建真实 session。
-- pi-tui 视图包含 Markdown 回复、CJK 安全单行工具卡片、审批/历史模态层、Echo 模式、`Esc` 中断、`Ctrl+R` 历史和双击 `Ctrl+C` 退出。
-- 包入口提供 `dsh-tui --help`、`dsh-tui --version`、Echo/ACP、模型、工作目录、持久化目录、tool cards 和 JSON 命令数组配置。
+- 默认模型 `deepseek-v4-flash`，默认 Quick 对应 DSH `low`；`--effort deep` 对应 `max`。
+- 内置 Code-light composition 提供工作区指令、文件读写编辑、文件搜索、Shell、审批与单活跃 Todo；不包含 Goal、Subagent、Workflow、Web Search 或后台任务宿主。
+- 同时只允许一个 ACP prompt，在运行期间可排队并继续编辑一条 follow-up。
+- ACP 负责最终回复和 prompt 结算；可选 live channel 提供低延迟文本/工具事件；JSONL 是工具元数据与历史回退。
+- 每轮 ACP 结束后先用 live barrier 排空同轮事件，再生成工具计数和任务摘要。
+- 主动中断显示 `Interrupted draft`；未知结果显示 `Unconfirmed draft`，且不会自动重放可能有副作用的 prompt。
+- API key 可通过一次隐藏的 `dsh-tui auth login` 保存；环境变量仅作为本次启动的只读覆盖。
 
-## 代码地图
+## 关键模块
 
 | 路径 | 责任 |
 | --- | --- |
-| `src/main.ts` | 进程边界和错误出口 |
-| `src/cli.ts` | help/version 和 CLI 分发 |
-| `src/app.ts` | Echo、ACP、日志、controller、view 的组合根 |
-| `src/controller.ts` | 与 pi-tui/ACP/文件系统解耦的状态机 |
-| `src/backend/acp-client.ts` | ACP stdio JSON-RPC transport |
-| `src/backend/session-log.ts` | DSH JSONL 旁路观察和只读历史 |
-| `src/ui/app-view.ts` | pi-tui 组件、键位和渲染 |
-| `src/ui/modal-list.ts` | 可测试的 SelectList overlay |
-| `src/policy.ts` | shell 风险和权限 stakes |
-| `src/usage.ts` | token/cost 计算 |
-| `src/text.ts` | 终端控制符清理和宽度截断 |
-| `config/cordis.posix.yml` | macOS/Linux 的 bundled DSH composition |
-| `config/cordis.windows.yml` | Windows PowerShell composition |
+| `src/main.ts` | 进程入口与错误出口 |
+| `src/cli.ts`, `src/version.ts` | CLI、认证/主题命令与统一版本 |
+| `src/app.ts` | DSH/Echo、Controller、日志与 View 组合根 |
+| `src/controller.ts` | 会话、任务、队列、中断、审批与摘要状态机 |
+| `src/backend/acp-client.ts` | 类型化 ACP transport、live barrier 与关闭顺序 |
+| `src/backend/assistant-stream.ts` | live 文本分块、排序与 ACP committed reconciliation |
+| `src/backend/session-log.ts` | JSONL 增量观察、最近 50 条预览与只读历史 |
+| `src/tool-timeline.ts` | live/JSONL 工具生命周期去重 |
+| `src/approval-queue.ts` | 串行审批、120 秒超时与 abort |
+| `src/ui/app-view.ts` | pi-tui 组合、输入、overlay 与增量 transcript |
+| `src/ui/welcome-card.ts`, `src/ui/theme.ts` | 响应式欢迎卡和 Terminal/DeepSeek Light 主题 |
+| `config/cordis.posix.yml`, `config/cordis.windows.yml` | Code-light DSH composition |
 
-## 安装与运行
+## 本地安装与开发
 
 ```bash
+git clone https://github.com/Nico0713520/dsh-tui.git
+cd dsh-tui
 npm ci
-npm run check
-npm run install:check
-
-npx --yes @nico0713520/dsh-tui@0.1.0 --echo
+npm run build
+npm link
+dsh-tui auth login
+dsh-tui
 ```
 
-ACP 模式需要用户在自己的环境中提供 `DEEPSEEK_API_KEY`：
+npm 包实际发布前只写源码安装方式。离线界面验证可运行 `dsh-tui --echo`。
 
-```bash
-# Set DEEPSEEK_API_KEY in the current shell first.
-npx --yes @nico0713520/dsh-tui@0.1.0 --mode acp --model deepseek-v4-flash
-```
-
-当前支持 Node.js `^22.19.0 || >=24.0.0`。开发时可运行 `npm start -- --echo`，发布包使用 `bin/dsh-tui.js` 加载 `dist/main.js`。
-
-## 交互和限制
-
-- `Enter` 发送，`Esc` 取消当前 prompt，`Ctrl+R` 打开历史，`Ctrl+C` 连按两次退出。
-- 历史是只读回放，不会调用 ACP resume/restore/continue；`+ New session` 才会清空当前状态并创建真实 session。
-- `--backend-command-json` 只接收 JSON 字符串数组，不做 shell 拆分，也不搜索某个开发者目录。
-- `--tool-cards off` 只关闭 JSONL 旁路卡片，不影响 ACP 流式回复。
-- `tests/live/dsh-live.test.ts` 只有在 `DSH_LIVE=1` 时运行；启用时必须有 API key，并会因缺失前置条件或事件失败而非零退出。没有授权时只能诚实记录为未执行。
-- `.github/workflows/ci.yml` 定义了 Ubuntu、macOS、Windows 与 Node 22.19/24 的 CI 矩阵；在本地不能宣称远端 Actions 已通过。
-
-## 本地验收命令
+## 验收命令
 
 ```bash
 npm run lint
 npm run typecheck
-npm run test
+npm run test:unit
+npm run test:integration
+npm run test:pty
+npm run composition:check
+npm run compat:check
 npm run build
+npm run publint
 npm run pack:check
 npm run install:check
-npx publint
-npm audit --omit=dev
 ```
 
-`npm audit` 的 advisory 应单独记录，不能通过偷偷升级或取消 pin 来隐藏。真实 live 验证使用：
+`tests/pty/tui-stress.test.ts` 使用标准 ACP 覆盖 10,000 text chunks、100 tools、resize storm、慢速分块与 queued follow-up。真实 DeepSeek 验收保持 opt-in：仅在执行环境已经安全提供凭证时运行 `DSH_LIVE=1 npm run test -- tests/live/dsh-live.test.ts`；不得把 key 写入命令参数、文档、日志或测试夹具。
 
-```bash
-DSH_LIVE=1 npm run test -- tests/live/dsh-live.test.ts
-```
+## 后续维护注意事项
 
-录制流程见 `scripts/demo-scenario.md`。只有真实运行并完成脱敏后才可以创建截图或 GIF；没有真实素材时不要创建占位文件。
-
-## 外部动作边界
-
-本地交接不包含 push、tag、GitHub Release、npm publish、仓库可见性/主题修改、Discussion、awesome-list PR 或抖音发布。后续执行这些动作前，必须由维护者单独决定并在已验收的具体 commit 上操作。
+- 先更新并验证 DSH composition，再改变 pin；不要让直接依赖混用不同 RC。
+- 保持 ACP、live、JSONL 三条信道的职责边界和 callId 去重。
+- 视觉改动必须继续覆盖 120/96/80/60/48/32 列、两套主题和图片/文字 Logo。
+- 旧会话只读回放；只有 `+ New session` 创建真实的新 ACP session。
+- 远端仓库状态、npm 发布状态和 CI 结果应在操作当时重新核验，不要从这份本地交接文档推断。

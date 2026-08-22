@@ -100,7 +100,7 @@ try {
   const initialized = await call("initialize", {
     protocolVersion: 1,
     clientCapabilities: {},
-    clientInfo: { name: "dsh-tui-composition-check", version: "0.1.0" },
+    clientInfo: { name: "dsh-tui-composition-check", version: "0.2.0" },
   })
   if (!initialized || typeof initialized !== "object") throw new Error("composition initialize response was invalid")
   const session = await call("session/new", { cwd: process.cwd(), mcpServers: [] })

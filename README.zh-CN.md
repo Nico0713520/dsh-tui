@@ -28,7 +28,7 @@ dsh-tui auth login
 dsh-tui
 ~~~
 
-公开的 v0.1 预览版目前从源码安装，npm 包尚未发布。
+v0.2 发布候选版目前从源码安装，npm 包实际发布前不提供虚假的 npm 安装命令。
 
 `auth login` 会隐藏输入 DeepSeek API key 并只保存一次；以后启动不再重复询问。如果直接启动 ACP 且尚未配置，也会进入同一次隐藏设置。默认模型是 `deepseek-v4-flash`，默认推理档位是 `quick`（DSH `low`）；只有确实需要最强推理的任务才使用 `--effort deep`。
 
@@ -61,11 +61,13 @@ Echo 只是本地 smoke/demo 后端，不会调用模型。
 正常链路会在终端里清楚显示：
 
 ~~~text
-⚙ read_file ~/demo-project/README.md
-⚙ run_command git diff --check
-CRITICAL approval
-→ Allow · run_command
-✓ verification passed
+◌ Read · read_file README.md
+✓ Read · read_file README.md · 42ms
+Approval required
+Tool      bash
+Action    git diff --check
+Risk      ROUTINE
+✓ Done · 2 tools · 1.4s
 ~~~
 
 审批弹窗只接受 ACP 实际提供的 option。历史回放会明确标记为只读，不会伪装成恢复旧 ACP session。
@@ -74,7 +76,9 @@ CRITICAL approval
 
 dsh-tui 会同时启动后台和非阻塞的 Quiet Signal 入场效果。空的新会话会展示完整响应式欢迎面板；第一条及后续消息都接在它的下方，欢迎面板本身不切换、不折叠，只会随着对话增长自然滚出屏幕。用户可以立即输入：启动期间提交的一条 prompt 仍可编辑，ACP session ready 后只会发送一次。
 
-任务进行时，状态栏会区分 thinking、responding、工具调用和审批。短暂活动与流式文本通过可选、有上限的事件管道到达，ACP 仍然是最终回复与 prompt 结算的权威来源。下一条 prompt 开始前，客户端会用不携带内容的控制屏障排空事件管道，避免中断 turn 的延迟记录串入新回复。任一实时管道缺失或异常时，客户端会自动退回 ACP 和 session JSONL，不会让 prompt 失败。推理正文不会被展示，也不会进入诊断信息。
+任务进行时，状态栏会区分 thinking、responding、工具调用和审批。短暂活动与流式文本通过可选、有上限的事件管道到达，ACP 仍然是最终回复与 prompt 结算的权威来源。每轮结算前及下一条 prompt 开始前，客户端都会用不携带内容的控制屏障排空事件管道，避免延迟工具污染任务摘要或串入下一轮。任一实时管道缺失或异常时，客户端会自动退回 ACP 和 session JSONL，不会让 prompt 失败。推理正文不会被展示，也不会进入诊断信息。
+
+后端同时只运行一条 prompt，编辑器里可以保留并修改一条后续消息。主动中断留下的文字会标成 `Interrupted draft`；后端异常退出留下的文字会标成 `Unconfirmed draft`，不会伪装成完整答案。
 
 前端会合并密集更新，并且只重新解析正在增长的 Markdown 尾部。这能降低事件到画面的延迟和终端抖动，但无法缩短 DeepSeek 网络或服务端的首 token 时间。
 
@@ -143,10 +147,10 @@ backend command 接收 JSON 数组，不是 shell 命令字符串，也不会交
 ## 已知限制
 
 - 当前预览 bundled Harness composition 固定为 0.1.1-rc.2。
-- 同时只能有一个 prompt 在执行。
+- 同时只能有一个 prompt 在执行；本地可以排队并编辑一条后续消息。
 - 模型价格未知时显示 unavailable，不会猜一个 cost。
 - 后端退出或超时时不会自动重放 prompt，因为副作用结果未知。
-- 当前 v0.1 预览版通过源码分发，npm 包尚未发布。
+- v0.2 发布候选版在 npm 包实际发布前仍通过源码分发。
 
 ## 故障排查
 

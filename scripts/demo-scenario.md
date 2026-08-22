@@ -1,4 +1,4 @@
-# dsh-tui v0.1 recording scenario
+# dsh-tui v0.2 recording scenario
 
 This is a deterministic recording recipe. Use a disposable, small repository and do not record API keys, usernames, home paths, session identifiers, or unrelated desktop notifications.
 

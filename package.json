@@ -1,6 +1,6 @@
 {
   "name": "@nico0713520/dsh-tui",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A lightweight, calm TUI built on the original DeepSeek Harness ACP flow",
   "repository": {
     "type": "git",

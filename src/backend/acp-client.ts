@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { createInterface, type Interface } from "node:readline"
 import type { Readable, Writable } from "node:stream"
 import { safeErrorText } from "../text.ts"
+import { VERSION } from "../version.ts"
 import { LiveRecordDecoder, type DshLiveRecord } from "./live-record.ts"
 import {
   parseAcpResult,
@@ -129,7 +130,7 @@ export class AcpClient {
       await this.call("initialize", {
         protocolVersion: 1,
         clientCapabilities: {},
-        clientInfo: { name: "dsh-tui", version: "0.1.0" },
+        clientInfo: { name: "dsh-tui", version: VERSION },
       })
       this.initialized = true
     }

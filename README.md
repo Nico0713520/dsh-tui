@@ -28,7 +28,7 @@ dsh-tui auth login
 dsh-tui
 ~~~
 
-The public v0.1 preview is currently installed from source. The npm package has not been published yet.
+The v0.2 release candidate is installed from source until the npm package is actually published.
 
 `auth login` reads the DeepSeek API key without echoing it and saves it once. Later launches start without asking again. A bare ACP launch also offers this one-time hidden setup when no credential exists. The default model is `deepseek-v4-flash`; the default reasoning profile is `quick` (`low`). Use `--effort deep` only when a task needs maximum reasoning.
 
@@ -61,11 +61,13 @@ Please read README.md, make one safe edit, and run a read-only verification.
 The normal flow is visible in the terminal:
 
 ~~~text
-⚙ read_file ~/demo-project/README.md
-⚙ run_command git diff --check
-CRITICAL approval
-→ Allow · run_command
-✓ verification passed
+◌ Read · read_file README.md
+✓ Read · read_file README.md · 42ms
+Approval required
+Tool      bash
+Action    git diff --check
+Risk      ROUTINE
+✓ Done · 2 tools · 1.4s
 ~~~
 
 The approval overlay only accepts an option supplied by ACP. History replay is marked read-only and does not pretend to restore the old ACP session.
@@ -74,7 +76,9 @@ The approval overlay only accepts an option supplied by ACP. History replay is m
 
 dsh-tui starts the backend and the non-blocking Quiet Signal entrance together. A fresh session shows the complete responsive welcome surface. The first prompt and every later message are appended below it, so the unchanged card leaves the viewport only through natural conversation scrolling. You can type immediately: one prompt submitted during startup stays editable and is sent exactly once when the ACP session is ready.
 
-During a turn, the status distinguishes thinking, responding, tool activity, and approval. Transient activity and text arrive over an optional bounded event pipe, while ACP remains authoritative for committed replies and prompt settlement. A content-free control barrier drains the event pipe before the next prompt, so delayed records from an interrupted turn cannot appear in the new turn. If either live pipe is unavailable or malformed, the client falls back to ACP and session JSONL without failing the prompt. Reasoning text is never displayed or copied into diagnostics.
+During a turn, the status distinguishes thinking, responding, tool activity, and approval. Transient activity and text arrive over an optional bounded event pipe, while ACP remains authoritative for committed replies and prompt settlement. A content-free control barrier drains the event pipe before a turn is finalized and before another prompt begins, so delayed tools cannot corrupt the summary or appear in the wrong turn. If either live pipe is unavailable or malformed, the client falls back to ACP and session JSONL without failing the prompt. Reasoning text is never displayed or copied into diagnostics.
+
+One prompt may run at a time, with one editable follow-up queued in the composer. Cancelled text is labeled `Interrupted draft`; text left by an unexpected backend exit is labeled `Unconfirmed draft` and is never presented as a completed answer.
 
 The frontend coalesces bursty updates and reparses only the active Markdown tail. This reduces event-to-paint delay and terminal churn, but it cannot reduce DeepSeek network or provider time-to-first-token.
 
@@ -143,10 +147,10 @@ Choose + New session to create a real ACP session. The previous transcript, part
 ## Known limitations
 
 - The bundled Harness composition is pinned to 0.1.1-rc.2 for this preview.
-- Only one prompt may be in flight at a time.
+- Only one prompt may be in flight at a time; one editable follow-up may be queued locally.
 - If the model price is unknown, cost is shown as unavailable instead of guessed.
 - A backend exit or timeout does not automatically replay the prompt because its side effects are unknown.
-- The v0.1 preview is source-distributed; the npm package is not published yet.
+- The v0.2 release candidate is source-distributed until the npm package is actually published.
 
 ## Troubleshooting
 
