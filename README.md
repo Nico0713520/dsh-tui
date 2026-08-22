@@ -30,7 +30,7 @@ dsh-tui
 
 The public v0.1 preview is currently installed from source. The npm package has not been published yet.
 
-`auth login` reads the DeepSeek API key without echoing it and saves it once. Later launches start without asking again. A bare ACP launch also offers this one-time hidden setup when no credential exists. The default model is `deepseek-v4-flash`.
+`auth login` reads the DeepSeek API key without echoing it and saves it once. Later launches start without asking again. A bare ACP launch also offers this one-time hidden setup when no credential exists. The default model is `deepseek-v4-flash`; the default reasoning profile is `quick` (`low`). Use `--effort deep` only when a task needs maximum reasoning.
 
 Manage the saved credential without starting the TUI:
 
@@ -111,6 +111,7 @@ Useful options:
 --tool-cards <on|off>
 --motion <full|reduced|off>
 --theme <terminal|deepseek>
+--effort <quick|deep>
 --perf
 dsh-tui --backend-command-json '["node","server.mjs"]'
 ~~~
@@ -120,13 +121,15 @@ The backend command is a JSON array, not a shell command string. It is never she
 ## Requirements and configuration
 
 - Node.js ^22.19.0 or >=24.0.0.
-- DeepSeek Harness 0.1.0-rc.7 is bundled as the current ACP composition.
+- DeepSeek Harness 0.1.1-rc.2 is bundled as the current ACP composition, with every direct DSH package pinned to that exact release.
+- The bundled profile is Code-light: bounded `AGENTS.md`/`CLAUDE.md` workspace instructions, file read/write/edit, file search, shell, approvals, and a single-active todo list. It is not the official full Code preset; Goal, Subagent, Workflow, Web Search, and background task hosting remain out of scope.
 - Managed credentials use `$DSH_HOME/.credentials.yaml`, defaulting to `~/.dsh/.credentials.yaml`; the directory/file are `0700`/`0600` on POSIX.
 - A non-empty inherited `DEEPSEEK_API_KEY` always wins and is never modified by `auth` commands.
 - --persist-root changes where session JSONL is read and observed.
 - --tool-cards off disables the JSONL side channel while keeping ACP replies.
 - DSH_TUI_MOTION accepts full, reduced, or off. NO_COLOR does not silently change motion policy.
 - DSH_TUI_THEME accepts terminal or deepseek; CLI override, environment, saved preference, then terminal is the precedence order.
+- DSH_TUI_EFFORT accepts quick or deep; `--effort` takes precedence and maps them to DSH `low` or `max` reasoning.
 - DSH_TUI_PERF=1 or --perf adds a sanitized per-turn latency diagnostic without event content.
 
 Owner-only file permissions protect a managed key from other OS users, not from every process running as your own user. Do not treat this local store as an isolation boundary from the coding agent itself.
@@ -139,7 +142,7 @@ Choose + New session to create a real ACP session. The previous transcript, part
 
 ## Known limitations
 
-- The bundled Harness composition is pinned to 0.1.0-rc.7 for this v0.1 preview.
+- The bundled Harness composition is pinned to 0.1.1-rc.2 for this preview.
 - Only one prompt may be in flight at a time.
 - If the model price is unknown, cost is shown as unavailable instead of guessed.
 - A backend exit or timeout does not automatically replay the prompt because its side effects are unknown.

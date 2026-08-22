@@ -30,7 +30,7 @@ dsh-tui
 
 公开的 v0.1 预览版目前从源码安装，npm 包尚未发布。
 
-`auth login` 会隐藏输入 DeepSeek API key 并只保存一次；以后启动不再重复询问。如果直接启动 ACP 且尚未配置，也会进入同一次隐藏设置。默认模型是 `deepseek-v4-flash`。
+`auth login` 会隐藏输入 DeepSeek API key 并只保存一次；以后启动不再重复询问。如果直接启动 ACP 且尚未配置，也会进入同一次隐藏设置。默认模型是 `deepseek-v4-flash`，默认推理档位是 `quick`（DSH `low`）；只有确实需要最强推理的任务才使用 `--effort deep`。
 
 不进入 TUI 也可以管理凭证：
 
@@ -111,6 +111,7 @@ dsh-tui theme terminal
 --tool-cards <on|off>
 --motion <full|reduced|off>
 --theme <terminal|deepseek>
+--effort <quick|deep>
 --perf
 dsh-tui --backend-command-json '["node","server.mjs"]'
 ~~~
@@ -120,13 +121,15 @@ backend command 接收 JSON 数组，不是 shell 命令字符串，也不会交
 ## 要求与配置
 
 - Node.js ^22.19.0 或 >=24.0.0。
-- 当前 v0.1 预览固定使用 bundled Harness composition 0.1.0-rc.7。
+- 当前 bundled Harness composition 固定使用 DeepSeek Harness 0.1.1-rc.2，所有直接 DSH 依赖精确锁在同一版本。
+- 内置能力是 Code-light：有上限的 `AGENTS.md`/`CLAUDE.md` 工作区指令、文件读写编辑、文件搜索、Shell、审批和单活跃 Todo。它不等于官方完整 Code preset；Goal、Subagent、Workflow、Web Search 和后台任务宿主仍不在本阶段范围内。
 - 托管凭证保存在 `$DSH_HOME/.credentials.yaml`，默认是 `~/.dsh/.credentials.yaml`；POSIX 下目录/文件权限为 `0700`/`0600`。
 - 非空的进程环境变量 `DEEPSEEK_API_KEY` 始终优先，`auth` 命令不会修改它。
 - --persist-root 修改读取和观察 session JSONL 的位置。
 - --tool-cards off 只关闭 JSONL 旁路卡片，不影响 ACP 回复。
 - DSH_TUI_MOTION 接受 full、reduced 或 off；NO_COLOR 不再暗中改变动效策略。
 - DSH_TUI_THEME 接受 terminal 或 deepseek；优先级依次是 CLI、环境变量、已保存偏好、terminal。
+- DSH_TUI_EFFORT 接受 quick 或 deep；`--effort` 优先，并分别映射为 DSH `low` 与 `max` 推理。
 - DSH_TUI_PERF=1 或 --perf 会增加不含事件内容的单轮延迟诊断。
 
 所有者专用文件权限可以防止其他 OS 用户读取 key，但无法隔离同一系统用户运行的所有进程；不要把这个本地存储当成对 coding agent 本身的安全边界。
@@ -139,7 +142,7 @@ backend command 接收 JSON 数组，不是 shell 命令字符串，也不会交
 
 ## 已知限制
 
-- 当前 v0.1 预览 bundled Harness composition 固定为 0.1.0-rc.7。
+- 当前预览 bundled Harness composition 固定为 0.1.1-rc.2。
 - 同时只能有一个 prompt 在执行。
 - 模型价格未知时显示 unavailable，不会猜一个 cost。
 - 后端退出或超时时不会自动重放 prompt，因为副作用结果未知。

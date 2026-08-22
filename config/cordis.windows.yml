@@ -46,9 +46,11 @@
     persistenceRoot: !!js process.env.DSH_PERSIST_ROOT
     persistenceCompression: none
     toolBash: false
-    workspaceContext: false
+    workspaceContext:
+      maxBytes: 65536
     persona: |
-      You are a coding assistant powered by the {{model}} model. Your working directory is {{cwd}}. Keep answers brief and factual.
+      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
+      Treat sandbox denials as policy, keep answers concise, and verify code changes with focused tests.
 
 - id: token-meter
   name: '@deepseek-ai/dsh-token-meter'
@@ -71,6 +73,16 @@
 
 - id: tool-fs
   name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: false
 
 - id: shell-env
   name: '@deepseek-ai/dsh-shell-env'

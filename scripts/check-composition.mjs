@@ -11,9 +11,17 @@ const backendBin = fileURLToPath(import.meta.resolve("@deepseek-ai/dsh-acp-demo/
 const configPath = fileURLToPath(new URL(`../config/${configFile}`, import.meta.url))
 const livePluginPath = fileURLToPath(new URL("../config/dsh-tui-live-events.mjs", import.meta.url))
 const livePluginText = await readFile(livePluginPath, "utf8")
+const requiredCodeLightIds = ["tool-fs", "tool-fs-search", "tool-todo"]
 for (const name of ["cordis.posix.yml", "cordis.windows.yml"]) {
   const text = await readFile(fileURLToPath(new URL(`../config/${name}`, import.meta.url)), "utf8")
   if (!text.includes("name: './dsh-tui-live-events.mjs'")) throw new Error(`${name} does not load the live event plugin`)
+  for (const id of requiredCodeLightIds) {
+    const matches = text.match(new RegExp(`^- id: ${id}$`, "gm")) ?? []
+    if (matches.length !== 1) throw new Error(`${name} must load ${id} exactly once`)
+  }
+  if (!/workspaceContext:\s*\n\s+maxBytes:\s*65536/.test(text)) {
+    throw new Error(`${name} must enable bounded workspace context`)
+  }
 }
 if (!livePluginText.includes('export const name = "dsh-tui-live-events"')) throw new Error("live event plugin export is missing")
 const child = spawn(process.execPath, [backendBin, "--config", configPath], {
