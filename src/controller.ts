@@ -341,7 +341,19 @@ export class AppController {
       stakes: classifyStakes(call?.name ?? "tool", parseArguments(call?.arguments ?? "{}")),
       workspace: workspaceName(this.config.cwd),
     }
-    this.setState({ activeOverlay: "approval", activity: { kind: "approval", name: approval.name } })
+    const transcript = call
+      ? this.applyToolEvent({
+          kind: "start",
+          callId: request.toolCallId,
+          name: call.name,
+          arguments: call.arguments,
+        })
+      : null
+    this.setState({
+      activeOverlay: "approval",
+      activity: { kind: "approval", name: approval.name },
+      ...(transcript ? { transcript } : {}),
+    })
     try {
       const decision = await this.view.requestApproval(approval, signal)
       return decision.outcome === "selected" && request.optionIds.includes(decision.optionId)

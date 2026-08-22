@@ -40,6 +40,7 @@
     "publint": "publint",
     "pack:check": "node scripts/check-pack.mjs",
     "install:check": "node scripts/check-install.mjs",
+    "release-assets:check": "node scripts/check-release-assets.mjs",
     "composition:check": "node scripts/check-composition.mjs",
     "compat:check": "node scripts/check-dsh-compat.mjs",
     "check": "npm run check:source && npm run compat:check && npm run composition:check && npm run publint && npm run pack:check",

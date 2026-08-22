@@ -148,15 +148,27 @@ export class AcpClient {
       this.liveBoundaryPrepared = true
       return
     }
+    const acknowledged = await this.awaitLiveBarrier()
+    this.liveBoundaryRequired = false
+    this.liveBoundaryPrepared = true
+    if (!acknowledged && child) await this.waitForExit(child, 100)
+  }
+
+  private async synchronizePermissionLiveEvents(): Promise<void> {
+    const child = this.process
+    const acknowledged = await this.awaitLiveBarrier()
+    if (!acknowledged && child) await this.waitForExit(child, 100)
+  }
+
+  private async awaitLiveBarrier(): Promise<boolean> {
     const control = this.liveControl
     if (!this.liveControlReady || !control || control.destroyed || !control.writable) {
       this.reportLivePipeFailure("live event synchronization unavailable; continuing with ACP")
       this.stopLiveEvents()
-      if (child) await this.waitForExit(child, 100)
-      return
+      return false
     }
     const id = this.nextLiveBarrierId++
-    const acknowledged = await new Promise<boolean>((resolve) => {
+    return new Promise<boolean>((resolve) => {
       let settled = false
       const finish = (barrierAcknowledged: boolean) => {
         if (settled) return
@@ -182,7 +194,6 @@ export class AcpClient {
         finish(false)
       }
     })
-    if (!acknowledged && child) await this.waitForExit(child, 100)
   }
 
   async prompt(text: string): Promise<{ stopReason: string }> {
@@ -392,7 +403,7 @@ export class AcpClient {
       return
     }
     if (message.method === "session/request_permission") {
-      this.handlePermission(message)
+      void this.synchronizePermissionLiveEvents().then(() => this.handlePermission(message))
     }
   }
 

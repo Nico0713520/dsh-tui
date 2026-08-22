@@ -4,11 +4,12 @@ import { tmpdir } from "node:os"
 import { describe, expect, it } from "vitest"
 import { AcpClient, type PermissionDecision } from "../../src/backend/acp-client.ts"
 import { SessionLogReader } from "../../src/backend/session-log.ts"
-import { AppController, type AppState, type ControllerView } from "../../src/controller.ts"
-import { resolveDefaultBackendCommand } from "../../src/app.ts"
+import { AppController, type AppState, type BackendPort, type ControllerView } from "../../src/controller.ts"
+import { createAcpClientEvents, resolveBackendEnvironment, resolveDefaultBackendCommand } from "../../src/app.ts"
 import type { AppConfig } from "../../src/config.ts"
 import type { ApprovalRequest, HistoryChoice } from "../../src/controller.ts"
 import type { SessionInfo } from "../../src/backend/session-log.ts"
+import { describeDeepSeekCredential } from "../../src/credentials.ts"
 
 const enabled = process.env.DSH_LIVE === "1"
 
@@ -24,8 +25,9 @@ describe("live dsh ACP flow", () => {
   const liveTest = enabled ? it : it.skip
 
   liveTest("answers, uses tools, rejects permission, cancels, resets, and shuts down", async () => {
-    if (!process.env.DEEPSEEK_API_KEY?.trim()) {
-      throw new Error("DSH_LIVE=1 requires DEEPSEEK_API_KEY; no credential value is printed")
+    const credential = await describeDeepSeekCredential({ env: process.env, cwd: process.cwd() })
+    if (!credential.configured) {
+      throw new Error("DSH_LIVE=1 requires a configured DeepSeek credential; no credential value is printed")
     }
 
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tui-live-"))
@@ -64,18 +66,26 @@ describe("live dsh ACP flow", () => {
     }
     const logs = new SessionLogReader({ pollIntervalMs: 50 })
     let controller: AppController
-    const backend = new AcpClient({
+    const client = new AcpClient({
       command: resolveDefaultBackendCommand(config),
       cwd: workspace,
-      events: {
-        onAssistantText: (text) => controller.onAssistantText(text),
-        onSessionChanged: (sessionId) => controller.onSessionChanged(sessionId),
-        onDiagnostic: (message) => controller.onDiagnostic(message),
-        onPermission: (request): Promise<PermissionDecision> => controller.decidePermission(request),
-        onBackendExit: (info) => controller.onBackendExit(info),
-      },
-      env: { ...process.env, DSH_MODEL: config.model, DSH_PERSIST_ROOT: config.persistRoot },
+      events: createAcpClientEvents(() => controller),
+      env: resolveBackendEnvironment(config),
     })
+    const promptCalls: string[] = []
+    const backend: BackendPort = {
+      start: () => client.start(),
+      newSession: () => client.newSession(),
+      synchronizeLiveEvents: () => client.synchronizeLiveEvents(),
+      prompt: (text) => {
+        promptCalls.push(text)
+        return client.prompt(text)
+      },
+      cancel: () => client.cancel(),
+      stopLiveEvents: () => client.stopLiveEvents(),
+      close: () => client.close(),
+      get activeSessionId() { return client.activeSessionId },
+    }
     controller = new AppController({ config, backend, logs, view })
 
     try {
@@ -84,13 +94,33 @@ describe("live dsh ACP flow", () => {
       const firstSession = controller.state.sessionId
       expect(firstSession).toBeTruthy()
 
-      await controller.submit("Reply with exactly LIVE_OK and nothing else.")
+      const firstPrompt = "Reply with exactly LIVE_OK and nothing else."
+      const secondPrompt = "Reply with exactly QUEUED_OK and nothing else."
+      const firstTurn = controller.submit(firstPrompt)
+      expect(controller.state.phase).toBe("working")
+      await controller.submit(secondPrompt)
+      await firstTurn
+      await waitFor(
+        () => controller.state.phase === "ready" && promptCalls.length === 2,
+        "queued live follow-up did not settle",
+        90_000,
+      )
+      const queuedFinalState = controller.state
+      expect(promptCalls).toEqual([firstPrompt, secondPrompt])
+      expect(queuedFinalState.queuedPrompt).toBeNull()
+      expect(queuedFinalState.phase).toBe("ready")
+      expect(queuedFinalState.transcript.filter((item) => item.kind === "user")).toHaveLength(2)
+      expect(states.some((state) => state.phase === "working" && state.partialAssistantText.length > 0)).toBe(true)
       expect(controller.state.transcript.some((entry) => entry.kind === "assistant" && "text" in entry && entry.text.includes("LIVE_OK"))).toBe(true)
 
       permissionMode = "allow"
       const toolPrompt = controller.submit("You must make exactly one bash tool call before answering. Use these exact arguments: command \"printf TOOL_OK\", description \"Print approval test marker\", sandbox_permissions \"danger-full-access\", justification \"Verify the approval flow\". Do not omit sandbox_permissions or answer before the tool call. After the tool result, reply exactly TOOL_RESULT_OK.")
       await waitFor(() => permissionRequests.length >= 1, "live tool prompt did not request permission", 90_000)
-      await waitFor(() => controller.state.transcript.some((entry) => entry.kind === "tool-call"), "live tool call was not observed", 30_000)
+      await waitFor(
+        () => states.some((state) => state.transcript.some((entry) => entry.kind === "tool-call")),
+        "live tool call was never rendered",
+        30_000,
+      )
       expect(decisions.some((decision) => decision.outcome === "selected")).toBe(true)
       await waitFor(() => controller.state.transcript.some((entry) => entry.kind === "tool-result"), "live tool result was not observed", 30_000)
       await toolPrompt

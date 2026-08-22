@@ -172,7 +172,9 @@ export class AppView implements ControllerView {
       color: options.color ?? !("NO_COLOR" in process.env),
     })
     this.partialAssistant = createStreamingMarkdownView({
-      markdown: (text) => new Markdown(text, 1, 0, this.theme.markdown),
+      markdown: (text) => new Markdown(text, 1, 0, this.theme.markdown, {
+        color: (value) => this.theme.fg("text", value),
+      }),
     })
     this.canvas = new ThemeCanvas(() => this.terminal.rows, this.theme)
     this.welcome = new WelcomeTranscriptComponent({

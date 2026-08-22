@@ -26,6 +26,7 @@ describe("transcript hierarchy", () => {
 
     expect(light).not.toBe(terminal)
     expect(light).toContain("\x1b[48;2;238;243;255m")
+    expect(light).toContain("\x1b[38;2;24;32;51m")
   })
 
   it("keeps assistant prose avatar-free and Markdown-aware", () => {
@@ -36,6 +37,12 @@ describe("transcript hierarchy", () => {
     expect(plain).toContain("Done.")
     expect(plain).not.toMatch(/assistant|❯/i)
     expect(lines.every((line) => visibleWidth(line) <= 48)).toBe(true)
+  })
+
+  it("gives DeepSeek Light assistant prose an explicit readable foreground", () => {
+    const rendered = renderAssistantMessage("Plain assistant text.", createUiTheme("deepseek")).render(48).join("\n")
+    expect(rendered).toContain("\x1b[38;2;24;32;51m")
+    expect(stripTerminalSequences(rendered)).toContain("Plain assistant text.")
   })
 
   it("labels interrupted and unconfirmed drafts without hiding their text", () => {

@@ -242,6 +242,23 @@ describe("AcpClient", () => {
     await acp.close()
   })
 
+  it("flushes earlier live tool events before presenting their permission request", async () => {
+    let events!: ReturnType<typeof createEvents>
+    const liveKindsAtPermission: string[][] = []
+    events = createEvents({
+      async onPermission(): Promise<PermissionDecision> {
+        liveKindsAtPermission.push(events.live.map((record) => record.kind))
+        return { outcome: "selected", optionId: "allow-once" }
+      },
+    })
+    const acp = client("permission-live-race", events)
+
+    await expect(acp.prompt("permission")).resolves.toMatchObject({ stopReason: "end_turn" })
+
+    expect(liveKindsAtPermission).toEqual([["tool-start"]])
+    await acp.close()
+  })
+
   it("rejects pending work and reports unknown outcome when the backend exits", async () => {
     const events = createEvents()
     const acp = client("forced-exit", events, { "session/prompt": 500 })

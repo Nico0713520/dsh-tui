@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "assets": {
+    "assets/screenshot.png": {
+      "bytes": 789355,
+      "sha256": "e9d9c4107e380ede0933ed393ea1bfea783266ff612775eb67ae97ed3f30f9eb"
+    },
+    "assets/demo.gif": {
+      "bytes": 4598244,
+      "sha256": "7db1aaa40695ed31bbba5f8a3271c1df94c6bee600058fa7f1629944d096fb6d"
+    },
+    "assets/demo-vertical.mp4": {
+      "bytes": 638428,
+      "sha256": "873398545c65880706ce64cfe0e364b3a8091e4280b9ff5aa43e4f3d5b8ecf80"
+    },
+    "assets/social-preview.png": {
+      "bytes": 465230,
+      "sha256": "d590142423f0c992a66867ca25acb0f47a5bd1afb273db933234e1a6651b98ac"
+    }
+  }
+}

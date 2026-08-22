@@ -6,6 +6,11 @@ import { reasoningEffort, type AppConfig } from "./config.ts"
 import { AppView } from "./ui/app-view.ts"
 import { safeErrorText } from "./text.ts"
 
+type AcpControllerTarget = Pick<
+  AppController,
+  "onAssistantText" | "onLiveRecord" | "onSessionChanged" | "onDiagnostic" | "decidePermission" | "onBackendExit"
+>
+
 class EchoBackend implements BackendPort {
   private sessionNumber = 0
   private sessionId: string | null = null
@@ -84,6 +89,19 @@ export function resolveBackendEnvironment(
   }
 }
 
+export function createAcpClientEvents(
+  resolveController: () => AcpControllerTarget,
+): AcpClientEvents {
+  return {
+    onAssistantText: (text) => resolveController().onAssistantText(text),
+    onLiveRecord: (record) => resolveController().onLiveRecord(record),
+    onSessionChanged: (sessionId) => resolveController().onSessionChanged(sessionId),
+    onDiagnostic: (message) => resolveController().onDiagnostic(message),
+    onPermission: (request) => resolveController().decidePermission(request),
+    onBackendExit: (info) => resolveController().onBackendExit(info),
+  }
+}
+
 export async function runApp(config: AppConfig): Promise<number> {
   const view = new AppView({
     mode: config.mode,
@@ -100,14 +118,7 @@ export async function runApp(config: AppConfig): Promise<number> {
   let resolveExit!: (code: number) => void
   const exit = new Promise<number>((resolve) => { resolveExit = resolve })
 
-  const backendEvents: AcpClientEvents = {
-    onAssistantText: (text) => controller.onAssistantText(text),
-    onLiveRecord: (record) => controller.onLiveRecord(record),
-    onSessionChanged: (sessionId) => controller.onSessionChanged(sessionId),
-    onDiagnostic: (message) => controller.onDiagnostic(message),
-    onPermission: (request) => controller.decidePermission(request),
-    onBackendExit: (info) => controller.onBackendExit(info),
-  }
+  const backendEvents = createAcpClientEvents(() => controller)
   const backend: BackendPort = config.mode === "echo"
     ? new EchoBackend((text) => controller.onAssistantText(text))
     : new AcpClient({

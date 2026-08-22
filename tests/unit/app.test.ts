@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { readFile } from "node:fs/promises"
-import { resolveBackendEnvironment, resolveDefaultBackendCommand } from "../../src/app.ts"
+import { createAcpClientEvents, resolveBackendEnvironment, resolveDefaultBackendCommand } from "../../src/app.ts"
 
 const baseConfig = {
   mode: "acp" as const,
@@ -38,6 +38,33 @@ describe("default ACP composition", () => {
     })
     expect(resolveBackendEnvironment({ ...baseConfig, reasoningMode: "deep" }, {}))
       .toMatchObject({ DSH_REASONING_EFFORT: "max" })
+  })
+
+  it("binds every ACP event channel, including live records, to the controller", async () => {
+    const controller = {
+      onAssistantText: vi.fn(),
+      onLiveRecord: vi.fn(),
+      onSessionChanged: vi.fn(),
+      onDiagnostic: vi.fn(),
+      decidePermission: vi.fn(async () => ({ outcome: "cancelled" as const })),
+      onBackendExit: vi.fn(),
+    }
+    const events = createAcpClientEvents(() => controller)
+    const liveRecord = { v: 1 as const, sessionId: "session-1", seq: 1, kind: "turn-start" as const, turn: 1 }
+
+    events.onAssistantText("chunk")
+    events.onLiveRecord?.(liveRecord)
+    events.onSessionChanged("session-1")
+    events.onDiagnostic("diagnostic")
+    await events.onPermission({ toolCallId: "call-1", optionIds: ["deny"] })
+    events.onBackendExit({ code: 0, signal: null, outcomeUnknown: false })
+
+    expect(controller.onAssistantText).toHaveBeenCalledWith("chunk")
+    expect(controller.onLiveRecord).toHaveBeenCalledWith(liveRecord)
+    expect(controller.onSessionChanged).toHaveBeenCalledWith("session-1")
+    expect(controller.onDiagnostic).toHaveBeenCalledWith("diagnostic")
+    expect(controller.decidePermission).toHaveBeenCalledWith({ toolCallId: "call-1", optionIds: ["deny"] })
+    expect(controller.onBackendExit).toHaveBeenCalledWith({ code: 0, signal: null, outcomeUnknown: false })
   })
 
   it("keeps Windows model tools PowerShell-only", async () => {

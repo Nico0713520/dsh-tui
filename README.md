@@ -4,6 +4,8 @@
 
 ![dsh-tui welcome and conversation view](https://raw.githubusercontent.com/Nico0713520/dsh-tui/master/assets/screenshot.png)
 
+[Horizontal demo](https://raw.githubusercontent.com/Nico0713520/dsh-tui/master/assets/demo.gif) · [Vertical demo](https://raw.githubusercontent.com/Nico0713520/dsh-tui/master/assets/demo-vertical.mp4)
+
 A lightweight, calm TUI for DeepSeek Harness. It keeps the original DSH packages and ACP flow, then adds a comfortable terminal surface for streaming replies, tool activity, explicit approvals, read-only history, and honest usage status.
 
 - **Original Harness flow:** built directly on the DeepSeek Harness composition instead of replacing the agent backend.
@@ -176,7 +178,7 @@ npm run publint
 npm run pack:check
 ~~~
 
-Live DeepSeek verification is opt-in and requires a credential already present in the environment:
+Live DeepSeek verification is opt-in and uses the same configured environment or managed credential as the CLI without printing its value:
 
 ~~~bash
 DSH_LIVE=1 npm run test -- tests/live/dsh-live.test.ts

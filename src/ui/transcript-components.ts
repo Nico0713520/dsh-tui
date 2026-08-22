@@ -25,7 +25,7 @@ class UserMessage implements Component {
     if (safeWidth < 3) return [truncateToWidth(this.text, safeWidth, "")]
     const bodyWidth = safeWidth - 2
     return wrapTextWithAnsi(this.text.replace(/\t/g, "   "), bodyWidth).map((line) => {
-      const row = `${this.theme.fg("brand", "▌")} ${line}`
+      const row = `${this.theme.fg("brand", "▌")} ${this.theme.fg("text", line)}`
       if (this.theme.name === "terminal") return row
       const padded = `${row}${" ".repeat(Math.max(0, safeWidth - visibleWidth(row)))}`
       return this.theme.bg("user", padded)
@@ -64,7 +64,9 @@ export function renderUserMessage(text: string, theme: UiTheme): Component {
 }
 
 export function renderAssistantMessage(text: string, theme: UiTheme): Component {
-  return new Markdown(sanitizeTerminalText(text), 1, 0, theme.markdown)
+  return new Markdown(sanitizeTerminalText(text), 1, 0, theme.markdown, {
+    color: (value) => theme.fg("text", value),
+  })
 }
 
 export function renderInterruptedAssistant(
@@ -75,7 +77,9 @@ export function renderInterruptedAssistant(
   const label = reason === "cancelled" ? "Interrupted draft" : "Unconfirmed draft"
   const container = new Container()
   container.addChild(new Text(`${theme.fg("warning", "!")} ${theme.fg("muted", label)}`, 1, 0))
-  container.addChild(new Markdown(sanitizeTerminalText(text), 1, 0, theme.markdown))
+  container.addChild(new Markdown(sanitizeTerminalText(text), 1, 0, theme.markdown, {
+    color: (value) => theme.fg("text", value),
+  }))
   return container
 }
 

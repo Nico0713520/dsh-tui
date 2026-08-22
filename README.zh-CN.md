@@ -4,6 +4,8 @@
 
 ![dsh-tui 欢迎页与对话界面](https://raw.githubusercontent.com/Nico0713520/dsh-tui/master/assets/screenshot.png)
 
+[横版演示](https://raw.githubusercontent.com/Nico0713520/dsh-tui/master/assets/demo.gif) · [竖版演示](https://raw.githubusercontent.com/Nico0713520/dsh-tui/master/assets/demo-vertical.mp4)
+
 一个轻量、舒服耐看的 DeepSeek Harness TUI。它保留原本的 DSH 包与 ACP 工作流，在上面增加流式回复、工具状态、明确审批、只读历史和诚实 usage 状态的终端界面。
 
 - **原汁原味的 Harness 流程：** 直接建立在 DeepSeek Harness composition 上，不重写 agent 后端。
@@ -176,7 +178,7 @@ npm run publint
 npm run pack:check
 ~~~
 
-真实 DeepSeek 验证是显式开启的，并要求凭证已经存在于环境变量：
+真实 DeepSeek 验证需要显式开启，会使用和 CLI 相同的环境凭证或已托管凭证，不会打印 key 内容：
 
 ~~~bash
 DSH_LIVE=1 npm run test -- tests/live/dsh-live.test.ts

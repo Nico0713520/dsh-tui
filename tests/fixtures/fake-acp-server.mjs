@@ -30,6 +30,19 @@ control.on("line", (line) => {
   }
   if (request?.v === 1 && request.kind === "barrier" && Number.isSafeInteger(request.id) && request.id >= 0) {
     if (scenario === "barrier-exit") process.exit(18)
+    if (scenario === "permission-live-race") {
+      liveRecords([{
+        v: 1,
+        sessionId: activeSessionId,
+        seq: 1,
+        kind: "tool-start",
+        turn: 1,
+        step: 1,
+        callId: "call-1",
+        name: "bash",
+        arguments: JSON.stringify({ command: "printf OK" }),
+      }])
+    }
     live.write(`${JSON.stringify({ v: 1, kind: "barrier", id: request.id })}\n`)
   }
 })
@@ -222,7 +235,7 @@ input.on("line", (line) => {
   if (scenario === "malformed") {
     process.stdout.write("not-json\\n")
   }
-  if (scenario === "permission") {
+  if (scenario === "permission" || scenario === "permission-live-race") {
     permissionId += 1
     setTimeout(() => {
       send({
@@ -254,6 +267,56 @@ input.on("line", (line) => {
 
   if (scenario === "stress") {
     void stressPrompt(frame)
+    return
+  }
+
+  if (scenario === "release-demo") {
+    let seq = 1
+    liveRecords([
+      { v: 1, sessionId: activeSessionId, seq: seq++, kind: "turn-start", turn: 1 },
+      { v: 1, sessionId: activeSessionId, seq: seq++, kind: "activity", turn: 1, step: 1, activity: "thinking" },
+    ])
+    setTimeout(() => liveRecords([{
+      v: 1,
+      sessionId: activeSessionId,
+      seq: seq++,
+      kind: "tool-start",
+      turn: 1,
+      step: 2,
+      callId: "release-readme",
+      name: "read_file",
+      arguments: JSON.stringify({ path: "README.md" }),
+    }]), 800)
+    setTimeout(() => liveRecords([{
+      v: 1,
+      sessionId: activeSessionId,
+      seq: seq++,
+      kind: "tool-end",
+      turn: 1,
+      step: 2,
+      callId: "release-readme",
+      isError: false,
+      text: "README.md verified",
+    }]), 1_800)
+    setTimeout(() => liveRecords([{
+      v: 1,
+      sessionId: activeSessionId,
+      seq: seq++,
+      kind: "text-delta",
+      turn: 1,
+      step: 3,
+      index: 0,
+      text: "README checked. ",
+    }]), 2_500)
+    setTimeout(() => {
+      const answer = "README checked. The v0.2 release surface is ready for local verification."
+      liveRecords([
+        { v: 1, sessionId: activeSessionId, seq: seq++, kind: "text-final", turn: 1, step: 3, index: 0, text: answer },
+        { v: 1, sessionId: activeSessionId, seq: seq++, kind: "turn-end", turn: 1, reason: "end_turn" },
+      ])
+      assistant(answer)
+      result(frame.id, { stopReason: "end_turn" })
+    }, 3_600)
     return
   }
 

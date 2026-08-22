@@ -221,6 +221,24 @@ describe("AppController", () => {
     await prompt
   })
 
+  it("shows a pending tool card when permission arrives before the observed tool event", async () => {
+    const harness = createHarness()
+    harness.deferPrompt()
+    await harness.controller.start()
+    const prompt = harness.controller.submit("run it")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    await harness.controller.decidePermission({ toolCallId: "approval-first", optionIds: ["allow-once"] })
+
+    expect(harness.controller.state.transcript).toContainEqual({
+      kind: "tool-call",
+      name: "bash",
+      arguments: JSON.stringify({ command: "rm -rf ." }),
+    })
+    harness.finishPrompt()
+    await prompt
+  })
+
   it("replaces the pending tool after a visible thinking trace is inserted", async () => {
     let now = 1_000
     const harness = createHarness({}, () => now)
