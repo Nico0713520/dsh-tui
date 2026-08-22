@@ -8,6 +8,7 @@ import type { DshLiveRecord } from "./backend/live-record.ts"
 import { TurnPerf } from "./perf.ts"
 import { TranscriptBuilder, historyToTranscript } from "./transcript-builder.ts"
 import { ApprovalQueue } from "./approval-queue.ts"
+import { ToolTimeline, type ToolTimelineEvent } from "./backend/tool-timeline.ts"
 
 export type AppPhase = "starting" | "ready" | "working" | "cancelling" | "failed" | "closing"
 
@@ -92,6 +93,7 @@ export class AppController {
   private readonly view: ControllerView
   private readonly assistantStream = createAssistantStream()
   private readonly transcriptBuilder: TranscriptBuilder
+  private readonly toolTimeline: ToolTimeline
   private readonly approvalQueue = new ApprovalQueue({
     onTimeout: (waitedMs) => this.addDiagnostic(`approval dialog timed out after ${Math.round(waitedMs / 1000)}s and was denied`),
   })
@@ -127,6 +129,7 @@ export class AppController {
     this.view = options.view
     this.now = options.now ?? Date.now
     this.transcriptBuilder = new TranscriptBuilder(this.now)
+    this.toolTimeline = new ToolTimeline(this.now)
   }
 
   get state(): AppState {
@@ -300,7 +303,7 @@ export class AppController {
 
   private async runPermissionRequest(request: PermissionRequest, signal: AbortSignal): Promise<PermissionDecision> {
     if (this.stateValue.phase === "closing") return { outcome: "cancelled" }
-    const call = this.transcriptBuilder.lookupTool(request.toolCallId)
+    const call = this.toolTimeline.lookup(request.toolCallId)
       ?? this.logs.lookupCall(request.toolCallId)
     const approval: ApprovalRequest = {
       toolCallId: request.toolCallId,
@@ -347,9 +350,15 @@ export class AppController {
     if (record.kind === "tool-start") {
       if (turnActive) this.turnPerf.mark("first-visible-activity")
       const activity: AppActivity = turnActive ? { kind: "tool", name: record.name } : this.stateValue.activity
-      const applied = this.transcriptBuilder.applyLiveToolStart(record, this.stateValue.transcript)
-      if (applied.accepted) {
-        this.setState({ partialAssistantText, activity, transcript: applied.transcript })
+      const transcript = this.applyToolEvent({
+        kind: "start",
+        source: "live",
+        callId: record.callId,
+        name: record.name,
+        arguments: record.arguments,
+      })
+      if (transcript) {
+        this.setState({ partialAssistantText, activity, transcript })
       } else {
         this.setState({ partialAssistantText, activity })
       }
@@ -358,9 +367,16 @@ export class AppController {
     if (record.kind === "tool-end") {
       if (turnActive) this.turnPerf.mark("first-visible-activity")
       const activity: AppActivity = turnActive ? { kind: "thinking" } : this.stateValue.activity
-      const applied = this.transcriptBuilder.applyLiveToolEnd(record, this.stateValue.transcript)
-      if (applied.accepted) {
-        this.setState({ partialAssistantText, activity, transcript: applied.transcript })
+      const transcript = this.applyToolEvent({
+        kind: "end",
+        source: "live",
+        callId: record.callId,
+        name: this.toolTimeline.lookup(record.callId)?.name ?? "tool",
+        text: record.text,
+        isError: record.isError,
+      })
+      if (transcript) {
+        this.setState({ partialAssistantText, activity, transcript })
       } else {
         this.setState({ partialAssistantText, activity })
       }
@@ -426,10 +442,23 @@ export class AppController {
 
   private onSessionLogEvent(event: SessionLogEvent): void {
     if (event.kind === "tool-call") {
-      const transcript = this.transcriptBuilder.applyLogToolCall(event, this.stateValue.transcript)
+      const transcript = this.applyToolEvent({
+        kind: "start",
+        source: "jsonl",
+        callId: event.callId,
+        name: event.name,
+        arguments: event.arguments,
+      })
       if (transcript) this.setState({ transcript })
     } else if (event.kind === "tool-result") {
-      const transcript = this.transcriptBuilder.applyLogToolResult(event, this.stateValue.transcript)
+      const transcript = this.applyToolEvent({
+        kind: "end",
+        source: "jsonl",
+        callId: event.callId,
+        name: event.name,
+        text: event.text,
+        isError: event.isError,
+      })
       if (transcript) this.setState({ transcript })
     } else {
       const key = event.turn === undefined || event.step === undefined ? undefined : `${event.turn}:${event.step}`
@@ -444,8 +473,19 @@ export class AppController {
     this.setState({ usage, costUsd: estimateCostUsd(this.config.model, usage) })
   }
 
+  private applyToolEvent(event: ToolTimelineEvent): readonly TranscriptItem[] | null {
+    const mutation = this.toolTimeline.apply(event)
+    if (mutation.kind === "none") return null
+    if (mutation.kind === "append") return [...this.stateValue.transcript, mutation.item]
+    const transcript = [...this.stateValue.transcript]
+    const index = transcript.findIndex((item) => item === mutation.target)
+    if (index >= 0 && transcript[index]?.kind === "tool-call") transcript[index] = mutation.item
+    else transcript.push(mutation.item)
+    return transcript
+  }
+
   private resetLiveMetadata(): void {
-    this.transcriptBuilder.resetSessionState()
+    this.toolTimeline.reset()
     this.seenUsageSteps.clear()
   }
 
