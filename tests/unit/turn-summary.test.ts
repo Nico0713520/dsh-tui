@@ -37,4 +37,16 @@ describe("turnSummaryText", () => {
     expect(visibleWidth(text)).toBeLessThanOrEqual(32)
     expect(stripTerminalSequences(text)).toContain("Outcome unknown")
   })
+
+  it("never renders a 60-second remainder", () => {
+    const text = stripTerminalSequences(turnSummaryText({
+      kind: "turn-summary",
+      status: "done",
+      durationMs: 119_999,
+      toolCount: 0,
+      failedToolCount: 0,
+    }, 80, theme))
+    expect(text).toContain("2m")
+    expect(text).not.toContain("60s")
+  })
 })

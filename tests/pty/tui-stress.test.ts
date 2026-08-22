@@ -57,6 +57,8 @@ describe("real TUI stress", () => {
       expect(sanitized).not.toContain("\"jsonrpc\"")
       expect(sanitized).not.toContain("\"sessionUpdate\"")
       expect(sanitized).not.toContain("{\"v\":1")
+      // Ten thousand protocol chunks must not become ten thousand full-screen paints.
+      expect(sanitized.length).toBeLessThan(500_000)
 
       const followUpStart = terminal.rawLength()
       terminal.write("still interactive\r")

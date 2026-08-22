@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest"
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui"
-import { activityLineText, thinkingTraceText } from "../../src/ui/activity-line.ts"
+import { activityLineText, formatDuration, thinkingTraceText } from "../../src/ui/activity-line.ts"
 import { createUiTheme } from "../../src/ui/theme.ts"
 
 const theme = createUiTheme("terminal")
 
 describe("activity line", () => {
+  it("formats exact duration boundaries without rolling over to 60s", () => {
+    expect(formatDuration(999)).toBe("999ms")
+    expect(formatDuration(59_949)).toBe("59.9s")
+    expect(formatDuration(59_999)).toBe("1m")
+    expect(formatDuration(119_999)).toBe("2m")
+    expect(formatDuration(84_000)).toBe("1m 24s")
+  })
+
   it("shows truthful activity without invented reasoning", () => {
     const text = activityLineText(
       { kind: "thinking" },
@@ -14,7 +22,7 @@ describe("activity line", () => {
     const plain = stripTerminalSequences(text)
 
     expect(plain).toContain("Thinking")
-    expect(plain).toContain("3s")
+    expect(plain).toContain("3.0s")
     expect(plain).not.toMatch(/because|reasoning/i)
     expect(visibleWidth(text)).toBeLessThanOrEqual(48)
   })

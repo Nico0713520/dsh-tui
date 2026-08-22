@@ -3,14 +3,6 @@ import type { TurnSummaryItem } from "../controller.ts"
 import { formatDuration } from "./activity-line.ts"
 import type { UiTheme } from "./theme.ts"
 
-function summaryDuration(durationMs: number): string {
-  const safe = Math.max(0, durationMs)
-  if (safe < 60_000) return formatDuration(safe)
-  const minutes = Math.floor(safe / 60_000)
-  const seconds = Math.round((safe % 60_000) / 1_000)
-  return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`
-}
-
 export function turnSummaryText(item: TurnSummaryItem, columns: number, theme: UiTheme): string {
   const status = item.status === "done"
     ? { marker: "✓", label: "Done", tone: "success" as const }
@@ -22,7 +14,7 @@ export function turnSummaryText(item: TurnSummaryItem, columns: number, theme: U
   const toolLabel = `${item.toolCount} ${item.toolCount === 1 ? "tool" : "tools"}`
   const failed = item.failedToolCount > 0 ? ` · ${item.failedToolCount} failed` : ""
   return truncateToWidth(
-    `${theme.fg(status.tone, status.marker)} ${theme.fg("muted", `${status.label} · ${toolLabel}${failed} · ${summaryDuration(item.durationMs)}`)}`,
+    `${theme.fg(status.tone, status.marker)} ${theme.fg("muted", `${status.label} · ${toolLabel}${failed} · ${formatDuration(item.durationMs)}`)}`,
     Math.max(1, columns),
     "…",
   )
