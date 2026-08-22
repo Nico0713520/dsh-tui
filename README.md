@@ -101,6 +101,7 @@ The welcome uses a calm framed split layout: a centered DeepSeek identity area o
 - Enter sends the editor contents.
 - Esc cancels a working prompt; with an approval/history overlay it closes only that overlay.
 - Ctrl+R opens read-only History.
+- PageUp/PageDown scroll the transcript; Shift+Up/Down moves one line and Ctrl+End resumes following new output.
 - Ctrl+O toggles compact/expanded tool output locally; it is never sent to the model.
 - `/status` opens a read-only Session panel built only from observable runtime facts.
 - Ctrl+C twice exits; the first press shows a temporary notice.

@@ -192,7 +192,7 @@ describe("real Echo TUI", () => {
   it("lets the complete welcome naturally scroll away in a long conversation", async () => {
     const terminal = spawnTui(["src/main.ts", "--echo", "--motion", "off"], { cols: 80, rows: 12 })
     try {
-      await terminal.waitForText("dsh-tui  v0.2.0")
+      await terminal.waitForText("ready")
       for (const prompt of ["one", "two", "three", "four"]) {
         const start = terminal.rawLength()
         terminal.write(`${prompt}\r`)
@@ -201,6 +201,20 @@ describe("real Echo TUI", () => {
         await new Promise((resolve) => setTimeout(resolve, 100))
       }
       expect(terminal.screenText()).not.toContain("DeepSeek Harness")
+
+      const bottom = terminal.screenText()
+      terminal.write("\x1b[5~")
+      await new Promise((resolve) => setTimeout(resolve, 120))
+      expect(terminal.screenText()).not.toBe(bottom)
+      expect(terminal.screenText()).toMatch(/one|two/)
+
+      terminal.write("\x1b[1;5F")
+      await new Promise((resolve) => setTimeout(resolve, 120))
+      const followStart = terminal.rawLength()
+      terminal.write("five\r")
+      await terminal.waitForText("[echo] five", 3_000, followStart)
+      await terminal.waitForText("ready", 3_000, followStart)
+      expect(terminal.screenText()).toContain("five")
       terminal.write("\u0003")
       await new Promise((resolve) => setTimeout(resolve, 50))
       terminal.write("\u0003")

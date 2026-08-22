@@ -3,6 +3,7 @@ import {
   Editor,
   Markdown,
   ProcessTerminal,
+  ScrollView,
   Text,
   TuiMainScreen,
   getCapabilities,
@@ -40,6 +41,8 @@ import { showApprovalPanel } from "./approval-panel.ts"
 import { showModalPanel } from "./modal-panel.ts"
 import { sessionPanelText } from "./session-panel.ts"
 import { turnSummaryComponent } from "./turn-summary.ts"
+import { resolveScrollKey } from "./scroll-keys.ts"
+import { MainScreenLayout } from "./main-screen-layout.ts"
 
 export interface ViewActions {
   onSubmit(text: string): void
@@ -55,8 +58,8 @@ export function headerText(columns: number, brand = "dsh-tui"): string {
   const raw = columns < 52
     ? `${brand} · Enter send · Ctrl+C ×2`
     : columns < 76
-      ? `${brand} · Enter send · Esc stop · Ctrl+R History · Ctrl+C ×2`
-      : `${brand} — Enter send · Esc interrupt · Ctrl+R History · Ctrl+C ×2 exit`
+      ? `${brand} · Enter send · PgUp scroll · Ctrl+R History · Ctrl+C ×2`
+      : `${brand} — Enter send · Esc interrupt · PgUp/PgDn scroll · Ctrl+R History · Ctrl+C ×2 exit`
   return truncateToWidth(raw, columns, "…")
 }
 
@@ -118,6 +121,7 @@ export class AppView implements ControllerView {
   private readonly committedTranscript = new Container()
   private readonly activeActivity = new Text("", 1, 0)
   private readonly partialAssistant: ReturnType<typeof createStreamingMarkdownView>
+  private readonly scroller = new ScrollView(this.transcript, { follow: "end", scrollbar: "auto" })
   private readonly canvas: ThemeCanvas
   private readonly welcome: WelcomeTranscriptComponent
   private readonly status = new Text("")
@@ -216,9 +220,13 @@ export class AppView implements ControllerView {
     this.transcript.addChild(this.committedTranscript)
     this.transcript.addChild(this.activeActivity)
     this.transcript.addChild(this.partialAssistant.element)
-    this.canvas.addChild(this.transcript)
-    this.canvas.addChild(this.editor)
-    this.canvas.addChild(this.status)
+    this.canvas.addChild(new MainScreenLayout(
+      this.scroller,
+      this.editor,
+      this.status,
+      () => this.terminal.rows,
+      () => this.tui.requestRender(),
+    ))
     this.tui.addChild(this.canvas)
   }
 
@@ -348,7 +356,7 @@ export class AppView implements ControllerView {
   async chooseHistory(items: readonly SessionInfo[]): Promise<HistoryChoice> {
     const choices = [
       { value: "__new__", label: this.theme.fg("success", "+ New session"), description: "Create a real ACP session and clear the current transcript" },
-      ...items.slice(0, 20).map((item) => ({
+      ...items.slice(0, 50).map((item) => ({
         value: item.id,
         label: singleLine(`${item.title || item.firstUserMessage || item.id.slice(0, 8)}`, 48),
         description: singleLine(`${new Intl.DateTimeFormat(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(item.mtimeMs)} · read-only`, 60),
@@ -428,11 +436,43 @@ export class AppView implements ControllerView {
       actions.onHistory()
       return { consume: true }
     }
+    if (this.handleScrollKey(data)) return { consume: true }
     if (matchesKey(data, "escape")) {
       actions.onCancel()
       return { consume: true }
     }
     return undefined
+  }
+
+  private handleScrollKey(data: string): boolean {
+    const action = resolveScrollKey(data, this.scroller.viewportHeight)
+    if (action === null) return false
+    if (action.kind === "start") {
+      this.scroller.scrollToStart()
+      this.flashScrollNotice("top · Ctrl+End follows output")
+    } else if (action.kind === "end") {
+      this.scroller.scrollToEnd()
+      this.flashScrollNotice("following output")
+    } else {
+      this.scroller.scrollBy(action.lines)
+      if (this.scroller.isFollowingEnd && action.lines > 0) this.flashScrollNotice("following output")
+      else if (!this.scroller.isFollowingEnd) this.flashScrollNotice("paused · Ctrl+End follows output")
+    }
+    return true
+  }
+
+  private flashScrollNotice(text: string): void {
+    this.notice = text
+    this.updateStatus()
+    this.tui.requestRender(true)
+    if (this.noticeTimer !== null) clearTimeout(this.noticeTimer)
+    this.noticeTimer = setTimeout(() => {
+      this.notice = ""
+      this.noticeTimer = null
+      this.updateStatus()
+      this.tui.requestRender()
+    }, 1_200)
+    this.noticeTimer.unref?.()
   }
 
   private updateWelcome(): void {
