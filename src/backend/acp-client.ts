@@ -3,6 +3,14 @@ import { createInterface, type Interface } from "node:readline"
 import type { Readable, Writable } from "node:stream"
 import { safeErrorText } from "../text.ts"
 import { LiveRecordDecoder, type DshLiveRecord } from "./live-record.ts"
+import {
+  parseAcpResult,
+  type AcpMethod,
+  type AcpNotificationMethod,
+  type AcpNotificationParams,
+  type AcpParams,
+  type AcpResult,
+} from "./acp-protocol.ts"
 
 export type PermissionDecision =
   | { outcome: "selected"; optionId: string }
@@ -29,11 +37,11 @@ export interface AcpClientOptions {
   cwd: string
   events: AcpClientEvents
   env?: NodeJS.ProcessEnv
-  timeouts?: Record<string, number>
+  timeouts?: Partial<Record<AcpMethod, number>>
 }
 
 interface PendingRequest {
-  method: string
+  method: AcpMethod
   resolve(value: unknown): void
   reject(error: Error): void
   timer: ReturnType<typeof setTimeout>
@@ -52,7 +60,7 @@ export class AcpClient {
   private readonly cwd: string
   private readonly events: AcpClientEvents
   private readonly environment: NodeJS.ProcessEnv
-  private readonly timeouts: Record<string, number>
+  private readonly timeouts: Record<AcpMethod, number>
   private process: ChildProcessWithoutNullStreams | null = null
   private output: Interface | null = null
   private liveOutput: Readable | null = null
@@ -126,9 +134,6 @@ export class AcpClient {
       this.initialized = true
     }
     const result = await this.call("session/new", { cwd: this.cwd, mcpServers: [] })
-    if (!isRecord(result) || typeof result.sessionId !== "string" || !result.sessionId) {
-      throw new Error("ACP session/new returned no sessionId")
-    }
     this.sessionId = result.sessionId
     this.liveBoundaryRequired = false
     this.liveBoundaryPrepared = false
@@ -205,10 +210,7 @@ export class AcpClient {
         sessionId,
         prompt: [{ type: "text", text }],
       })
-      const stopReason = isRecord(result) && typeof result.stopReason === "string"
-        ? result.stopReason
-        : "unknown"
-      return { stopReason }
+      return { stopReason: result.stopReason }
     } finally {
       if (this.promptRequestSent) this.liveBoundaryRequired = true
       this.promptInFlight = false
@@ -222,11 +224,7 @@ export class AcpClient {
     this.promptCancelRequested = true
     if (!this.sessionId || !this.promptRequestSent || !this.process) return
     try {
-      this.writeFrame({
-        jsonrpc: "2.0",
-        method: "session/cancel",
-        params: { sessionId: this.sessionId, reason: "user interrupted" },
-      })
+      this.writeNotification("session/cancel", { sessionId: this.sessionId, reason: "user interrupted" })
     } catch (error) {
       this.events.onDiagnostic(`cancel failed: ${safeErrorText(error)}`)
     }
@@ -372,7 +370,11 @@ export class AcpClient {
       if (isRecord(error)) {
         pending.reject(new Error(`ACP ${pending.method}: ${safeErrorText(error.message ?? error)}`))
       } else {
-        pending.resolve(message.result)
+        try {
+          pending.resolve(parseAcpResult(pending.method, message.result))
+        } catch (parseError) {
+          pending.reject(parseError instanceof Error ? parseError : new Error(safeErrorText(parseError)))
+        }
       }
       return
     }
@@ -460,11 +462,11 @@ export class AcpClient {
       .then(respond)
   }
 
-  private call(method: string, params: unknown): Promise<unknown> {
+  private call<M extends AcpMethod>(method: M, params: AcpParams<M>): Promise<AcpResult<M>> {
     this.ensureProcess()
     const id = this.nextId++
     const timeoutMs = this.timeouts[method] ?? 30_000
-    return new Promise((resolve, reject) => {
+    return new Promise<AcpResult<M>>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
         this.outcomeUnknownOnExit = true
@@ -472,7 +474,12 @@ export class AcpClient {
         const child = this.process
         if (child) this.requestTermination(child, `ACP ${method} timeout`)
       }, timeoutMs)
-      this.pending.set(id, { method, resolve, reject, timer })
+      this.pending.set(id, {
+        method,
+        resolve: (value) => resolve(value as AcpResult<M>),
+        reject,
+        timer,
+      })
       try {
         this.writeFrame({ jsonrpc: "2.0", id, method, params })
       } catch (error) {
@@ -481,6 +488,13 @@ export class AcpClient {
         reject(new Error(`ACP ${method} write failed: ${safeErrorText(error)}`))
       }
     })
+  }
+
+  private writeNotification<M extends AcpNotificationMethod>(
+    method: M,
+    params: AcpNotificationParams<M>,
+  ): void {
+    this.writeFrame({ jsonrpc: "2.0", method, params })
   }
 
   private writeFrame(frame: RecordValue): void {
