@@ -30,6 +30,7 @@ import {
   renderAssistantMessage,
   renderDiagnostic,
   renderHistoryBoundary,
+  renderInterruptedAssistant,
   renderUserMessage,
 } from "./transcript-components.ts"
 import { activityLineText, thinkingTraceText } from "./activity-line.ts"
@@ -356,6 +357,8 @@ export class AppView implements ControllerView {
       this.committedTranscript.addChild(renderUserMessage(item.text, this.theme))
     } else if (item.kind === "assistant") {
       this.committedTranscript.addChild(renderAssistantMessage(item.text, this.theme))
+    } else if (item.kind === "interrupted-assistant") {
+      this.committedTranscript.addChild(renderInterruptedAssistant(item.text, item.reason, this.theme))
     } else if (item.kind === "thinking-trace") {
       this.committedTranscript.addChild(new Text(thinkingTraceText(item.durationMs, this.terminal.columns, this.theme), 0, 0))
     } else if (item.kind === "tool-call" || item.kind === "tool-result") {

@@ -4,6 +4,7 @@ import {
   renderAssistantMessage,
   renderDiagnostic,
   renderHistoryBoundary,
+  renderInterruptedAssistant,
   renderUserMessage,
 } from "../../src/ui/transcript-components.ts"
 import { createUiTheme } from "../../src/ui/theme.ts"
@@ -35,6 +36,17 @@ describe("transcript hierarchy", () => {
     expect(plain).toContain("Done.")
     expect(plain).not.toMatch(/assistant|❯/i)
     expect(lines.every((line) => visibleWidth(line) <= 48)).toBe(true)
+  })
+
+  it("labels interrupted and unconfirmed drafts without hiding their text", () => {
+    const interrupted = renderInterruptedAssistant("partial result", "cancelled", createUiTheme("terminal"))
+    const unknown = renderInterruptedAssistant("possibly applied", "outcome-unknown", createUiTheme("terminal"))
+
+    expect(stripTerminalSequences(interrupted.render(48).join("\n"))).toContain("Interrupted draft")
+    expect(stripTerminalSequences(interrupted.render(48).join("\n"))).toContain("partial result")
+    expect(stripTerminalSequences(unknown.render(48).join("\n"))).toContain("Unconfirmed draft")
+    expect(interrupted.render(32).every((line) => visibleWidth(line) <= 32)).toBe(true)
+    expect(unknown.render(32).every((line) => visibleWidth(line) <= 32)).toBe(true)
   })
 
   it("keeps diagnostics and history boundaries secondary and bounded", () => {

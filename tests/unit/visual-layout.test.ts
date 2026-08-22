@@ -19,6 +19,7 @@ import {
   renderAssistantMessage,
   renderDiagnostic,
   renderHistoryBoundary,
+  renderInterruptedAssistant,
   renderUserMessage,
 } from "../../src/ui/transcript-components.ts"
 import { toolCardComponent } from "../../src/ui/tool-card.ts"
@@ -101,6 +102,7 @@ describe("complete visual layout matrix", () => {
         welcome(width, textCapabilities, themeName),
         renderUserMessage("你好，这是一个很长的用户问题。".repeat(3), theme),
         renderAssistantMessage("## Result\n\nAssistant prose without an avatar.", theme),
+        renderInterruptedAssistant("Partial assistant prose.", "cancelled", theme),
         new Text(thinkingTraceText(1_250, width, theme), 0, 0),
         toolCardComponent(pending, { expanded: false, frame: 0, theme }),
         toolCardComponent(success, { expanded: true, frame: 0, theme }),

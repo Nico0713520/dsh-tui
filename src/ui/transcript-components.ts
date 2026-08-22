@@ -1,4 +1,5 @@
 import {
+  Container,
   Markdown,
   Text,
   truncateToWidth,
@@ -8,6 +9,7 @@ import {
 } from "@earendil-works/pi-tui"
 import { sanitizeTerminalText, singleLine } from "../text.ts"
 import type { UiTheme } from "./theme.ts"
+import type { InterruptedReason } from "../controller.ts"
 
 class UserMessage implements Component {
   private readonly text: string
@@ -63,6 +65,18 @@ export function renderUserMessage(text: string, theme: UiTheme): Component {
 
 export function renderAssistantMessage(text: string, theme: UiTheme): Component {
   return new Markdown(sanitizeTerminalText(text), 1, 0, theme.markdown)
+}
+
+export function renderInterruptedAssistant(
+  text: string,
+  reason: InterruptedReason,
+  theme: UiTheme,
+): Component {
+  const label = reason === "cancelled" ? "Interrupted draft" : "Unconfirmed draft"
+  const container = new Container()
+  container.addChild(new Text(`${theme.fg("warning", "!")} ${theme.fg("muted", label)}`, 1, 0))
+  container.addChild(new Markdown(sanitizeTerminalText(text), 1, 0, theme.markdown))
+  return container
 }
 
 export function renderDiagnostic(text: string, theme: UiTheme): Component {

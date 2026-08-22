@@ -559,8 +559,43 @@ describe("AppController", () => {
 
     expect(harness.controller.state.phase).toBe("failed")
     expect(harness.controller.state.interruption).toBe("outcome-unknown")
-    expect(harness.controller.state.transcript).toContainEqual({ kind: "assistant", text: "possibly applied" })
+    expect(harness.controller.state.transcript).toContainEqual({
+      kind: "interrupted-assistant",
+      text: "possibly applied",
+      reason: "outcome-unknown",
+    })
+    expect(harness.controller.state.transcript).not.toContainEqual({ kind: "assistant", text: "possibly applied" })
     expect(harness.promptCalls).toEqual(["side effect"])
+  })
+
+  it("never presents an interrupted live prefix as a completed assistant answer", async () => {
+    const harness = createHarness()
+    harness.deferPrompt()
+    await harness.controller.start()
+    const prompt = harness.controller.submit("long task")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    harness.controller.onLiveRecord({
+      v: 1,
+      sessionId: "session-1",
+      seq: 1,
+      kind: "text-delta",
+      turn: 1,
+      step: 1,
+      index: 0,
+      text: "partial result",
+    })
+    harness.finishPrompt("cancelled")
+    await prompt
+
+    expect(harness.controller.state.transcript).toContainEqual({
+      kind: "interrupted-assistant",
+      text: "partial result",
+      reason: "cancelled",
+    })
+    expect(harness.controller.state.transcript).not.toContainEqual({
+      kind: "assistant",
+      text: "partial result",
+    })
   })
 
   it("opens live streaming for the next prompt only after an interrupted turn", async () => {

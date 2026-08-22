@@ -16,8 +16,11 @@ export type AppActivity =
   | { kind: "idle" | "thinking" | "responding" }
   | { kind: "tool" | "approval"; name: string }
 
+export type InterruptedReason = "cancelled" | "outcome-unknown"
+
 export type TranscriptItem =
   | { kind: "user" | "assistant" | "diagnostic"; text: string }
+  | { kind: "interrupted-assistant"; text: string; reason: InterruptedReason }
   | { kind: "thinking-trace"; durationMs: number }
   | { kind: "tool-call"; name: string; arguments: string }
   | { kind: "tool-result"; name: string; arguments?: string; text: string; isError: boolean; durationMs?: number }
@@ -211,7 +214,7 @@ export class AppController {
     } catch (error) {
       if (this.isClosing() || this.stateValue.phase === "failed") return
       this.turnPerf.mark("settled")
-      this.finishAssistant("")
+      this.finishAssistant("outcome-unknown")
       this.reportPerf()
       this.fail(error)
     }
@@ -405,7 +408,7 @@ export class AppController {
       const snapshot = this.assistantStream.interrupt("outcome-unknown")
       this.setState({ partialAssistantText: snapshot.text, interruption: "outcome-unknown", activity: { kind: "idle" } })
     }
-    this.finishAssistant("")
+    this.finishAssistant("outcome-unknown")
     this.turnPerf.mark("settled")
     this.reportPerf()
     this.fail(new Error(info.outcomeUnknown ? "Backend exited; prompt outcome is unknown." : "Backend exited."))
@@ -454,11 +457,19 @@ export class AppController {
     this.addDiagnostic(`[perf] ${report}`)
   }
 
-  private finishAssistant(_stopReason: string): void {
+  private finishAssistant(stopReason: string): void {
     const text = this.stateValue.partialAssistantText
     if (!text) return
+    const reason: InterruptedReason | null = stopReason === "cancelled"
+      ? "cancelled"
+      : stopReason === "outcome-unknown" || this.stateValue.interruption === "outcome-unknown"
+        ? "outcome-unknown"
+        : null
+    const item: TranscriptItem = reason
+      ? { kind: "interrupted-assistant", text, reason }
+      : { kind: "assistant", text }
     this.setState({
-      transcript: [...this.stateValue.transcript, { kind: "assistant", text }],
+      transcript: [...this.stateValue.transcript, item],
       partialAssistantText: "",
     })
   }
