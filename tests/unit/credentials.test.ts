@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest"
-import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import {
@@ -57,18 +57,51 @@ describe("DeepSeek credential storage", () => {
     expect(await readFile(filename, "utf8")).toContain("managed-test-secret")
   })
 
-  it("preserves unrelated entries and removes only the DeepSeek credential", async () => {
+  it("reads the official versioned document, preserves unrelated entries, and removes only DeepSeek", async () => {
     const home = await tempHome()
     const options = { env: {}, home, platform: process.platform }
     const filename = credentialFilePath({}, home)
+    await mkdir(join(home, ".dsh"), { recursive: true, mode: 0o700 })
+    await writeFile(filename, [
+      "version: 1",
+      "refs:",
+      "  DEEPSEEK_API_KEY: managed-test-secret",
+      "  OPENAI_API_KEY: keep-me",
+      "",
+    ].join("\n"), { mode: 0o600 })
 
-    await storeDeepSeekCredential("managed-test-secret", options)
-    await writeFile(filename, "DEEPSEEK_API_KEY: managed-test-secret\nOPENAI_API_KEY: keep-me\n", { mode: 0o600 })
+    await expect(describeDeepSeekCredential(options)).resolves.toEqual({
+      configured: true,
+      source: "managed",
+      writable: true,
+    })
+    await storeDeepSeekCredential("replacement-test-secret", options)
+    expect(await readFile(filename, "utf8")).toContain("OPENAI_API_KEY: keep-me")
+    expect(await readFile(filename, "utf8")).toContain("replacement-test-secret")
 
     await expect(removeDeepSeekCredential(options)).resolves.toBe(true)
     await expect(removeDeepSeekCredential(options)).resolves.toBe(false)
     expect(await readFile(filename, "utf8")).toContain("OPENAI_API_KEY: keep-me")
     await expect(describeDeepSeekCredential(options)).resolves.toMatchObject({ configured: false, source: "missing" })
+  })
+
+  it("lets the official provider migrate the recognized flat pre-release layout", async () => {
+    const home = await tempHome()
+    const options = { env: {}, home, platform: process.platform }
+    const filename = credentialFilePath({}, home)
+    await mkdir(join(home, ".dsh"), { recursive: true, mode: 0o700 })
+    await writeFile(filename, "# retained\nDEEPSEEK_API_KEY: migration-test-secret\n", { mode: 0o600 })
+
+    await expect(describeDeepSeekCredential(options)).resolves.toMatchObject({
+      configured: true,
+      source: "managed",
+    })
+
+    const migrated = await readFile(filename, "utf8")
+    expect(migrated).toContain("version: 1")
+    expect(migrated).toContain("refs:")
+    expect(migrated).toContain("  DEEPSEEK_API_KEY: migration-test-secret")
+    expect(migrated).toContain("  # retained")
   })
 
   it("rejects unsafe or malformed documents without repeating their contents", async () => {
@@ -80,7 +113,7 @@ describe("DeepSeek credential storage", () => {
     await writeFile(filename, "DEEPSEEK_API_KEY: leaked-parser-secret\nDEEPSEEK_API_KEY: duplicate", { mode: 0o600 })
 
     const malformed = await describeDeepSeekCredential(options).catch((error: unknown) => error)
-    expect(String(malformed)).toMatch(/invalid credential document/i)
+    expect(String(malformed)).toMatch(/invalid document/i)
     expect(String(malformed)).not.toContain("leaked-parser-secret")
 
     if (process.platform !== "win32") {

@@ -76,7 +76,7 @@ async function runAuthCommand(
   env: NodeJS.ProcessEnv,
   dependencies: Required<CliDependencies>,
 ): Promise<number> {
-  const options = { env, home: dependencies.home, platform: dependencies.platform }
+  const options = { env, home: dependencies.home, platform: dependencies.platform, cwd: process.cwd() }
 
   if (command === "status") {
     const status = await describeDeepSeekCredential(options)
@@ -139,7 +139,7 @@ export async function runCli(
   const preferences = loadUiPreferences({ env, home: dependencies.home, platform: dependencies.platform })
   const config = loadConfig(argv, env, dependencies.platform, preferences)
   if (config.mode === "acp") {
-    const options = { env, home: dependencies.home, platform: dependencies.platform }
+    const options = { env, home: dependencies.home, platform: dependencies.platform, cwd: config.cwd }
     const status = await describeDeepSeekCredential(options)
     if (!status.configured) {
       const secret = await dependencies.readSecret("DeepSeek API key (hidden, saved once): ")
