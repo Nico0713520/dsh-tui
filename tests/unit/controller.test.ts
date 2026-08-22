@@ -499,7 +499,32 @@ describe("AppController", () => {
     expect(harness.controller.state.partialAssistantText).toBe("")
   })
 
-  it("blocks duplicate submit without adding a second user turn", async () => {
+  it("queues one editable follow-up and sends it after the active prompt", async () => {
+    const harness = createHarness()
+    harness.deferPrompt()
+    await harness.controller.start()
+    const first = harness.controller.submit("one")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await harness.controller.submit("two")
+    harness.controller.updateDraft("two edited")
+
+    expect(harness.promptCalls).toEqual(["one"])
+    expect(harness.controller.state.queuedPrompt).toBe("two edited")
+    harness.finishPrompt()
+    await first
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(harness.promptCalls).toEqual(["one", "two edited"])
+    expect(harness.controller.state.transcript).toEqual([
+      { kind: "user", text: "one" },
+      { kind: "user", text: "two edited" },
+    ])
+    harness.finishPrompt()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(harness.controller.state.phase).toBe("ready")
+  })
+
+  it("lets an empty draft remove the queued follow-up", async () => {
     const harness = createHarness()
     harness.deferPrompt()
     await harness.controller.start()
@@ -507,12 +532,12 @@ describe("AppController", () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
     await harness.controller.submit("two")
 
-    expect(harness.controller.state.transcript).toEqual([
-      { kind: "user", text: "one" },
-      { kind: "diagnostic", text: "Already working; wait for the current prompt to settle." },
-    ])
+    harness.controller.updateDraft("")
+    expect(harness.controller.state.queuedPrompt).toBeNull()
     harness.finishPrompt()
     await first
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(harness.promptCalls).toEqual(["one"])
   })
 
   it("resets transcript, usage, cost, watcher, and overlay state for a new session", async () => {

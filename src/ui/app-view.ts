@@ -59,6 +59,10 @@ export function headerText(columns: number, brand = "dsh-tui"): string {
   return truncateToWidth(raw, columns, "…")
 }
 
+export function editorSubmitDisabled(state: AppState): boolean {
+  return state.queuedPrompt !== null || state.activeOverlay !== null
+}
+
 export function statusText(
   state: AppState,
   options: FooterOptions,
@@ -261,7 +265,12 @@ export class AppView implements ControllerView {
     const toolCompleted = this.currentState?.transcript.some((item, index) => (
       item.kind === "tool-call" && state.transcript[index]?.kind === "tool-result"
     )) ?? false
-    const priority = state.phase === "ready" || state.phase === "failed" || state.phase === "closing" || toolCompleted
+    const queuedPromptChanged = this.currentState?.queuedPrompt !== state.queuedPrompt
+    const priority = state.phase === "ready"
+      || state.phase === "failed"
+      || state.phase === "closing"
+      || toolCompleted
+      || queuedPromptChanged
     this.renderGate.submit(state, priority)
   }
 
@@ -289,10 +298,7 @@ export class AppView implements ControllerView {
       if (this.editor.getText() === this.lastQueuedPrompt) this.editor.setText("")
       this.lastQueuedPrompt = null
     }
-    this.editor.disableSubmit = state.queuedPrompt !== null
-      || state.phase === "working"
-      || state.phase === "cancelling"
-      || state.activeOverlay !== null
+    this.editor.disableSubmit = editorSubmitDisabled(state)
     const canReuseRendered = state.transcript.length >= this.renderedTranscript.length
       && this.renderedTranscript.every((item, index) => item === state.transcript[index]
         || (item.kind === "tool-call" && state.transcript[index]?.kind === "tool-result"

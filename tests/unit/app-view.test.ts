@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { Markdown, stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui"
 import type { Component } from "@earendil-works/pi-tui"
 import type { AppState } from "../../src/controller.ts"
-import { headerText, statusText, toolResultText } from "../../src/ui/app-view.ts"
+import { editorSubmitDisabled, headerText, statusText, toolResultText } from "../../src/ui/app-view.ts"
 import { createStreamingMarkdownView } from "../../src/ui/streaming-markdown.ts"
 import { markdownTheme } from "../../src/ui/theme.ts"
 
@@ -21,6 +21,12 @@ const state: AppState = {
 }
 
 describe("TUI presentation", () => {
+  it("accepts one follow-up while working and locks submit only after it is queued", () => {
+    expect(editorSubmitDisabled({ ...state, phase: "working" })).toBe(false)
+    expect(editorSubmitDisabled({ ...state, phase: "working", queuedPrompt: "next" })).toBe(true)
+    expect(editorSubmitDisabled({ ...state, activeOverlay: "history" })).toBe(true)
+  })
+
   it("reparses only the active Markdown tail while stable blocks keep their identity", () => {
     let parsedBytes = 0
     class CountedMarkdown implements Component {
@@ -154,6 +160,16 @@ describe("TUI presentation", () => {
     expect(statuses[3]).toContain("approval bash")
     expect([...new Set(statuses.map((text) => text.indexOf(" · 3s")))]).toHaveLength(1)
     expect(statuses.every((text) => visibleWidth(text) <= 80)).toBe(true)
+  })
+
+  it("shows queued follow-up without exposing its content", () => {
+    const text = stripTerminalSequences(statusText(
+      { ...state, phase: "working", queuedPrompt: "private follow-up contents" },
+      { mode: "acp", model: "deepseek-v4-flash" },
+      80,
+    ))
+    expect(text).toContain("queued follow-up")
+    expect(text).not.toContain("private follow-up contents")
   })
 
   it("keeps phase and model ahead of low-priority details on a narrow terminal", () => {

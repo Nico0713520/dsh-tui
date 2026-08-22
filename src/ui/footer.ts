@@ -17,7 +17,7 @@ function activityLabel(state: AppState): string {
     : state.activity.kind === "tool" ? `tool ${singleLine(state.activity.name, 12)}`
       : state.activity.kind === "approval" ? `approval ${singleLine(state.activity.name, 9)}`
         : state.activity.kind
-  return state.queuedPrompt !== null ? "queued"
+  return state.queuedPrompt !== null ? "queued follow-up"
     : state.phase === "starting" ? (state.activity.kind === "boot" ? activity : "starting")
       : state.phase === "cancelling" ? "cancelling"
         : state.phase === "failed" ? "failed"

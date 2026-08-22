@@ -163,18 +163,20 @@ export class AppController {
       this.setState({ queuedPrompt: value })
       return
     }
+    if (this.stateValue.phase === "working" || this.stateValue.phase === "cancelling") {
+      this.setState({ queuedPrompt: value })
+      return
+    }
     if (this.stateValue.phase !== "ready") {
-      this.addDiagnostic(this.stateValue.phase === "working" || this.stateValue.phase === "cancelling"
-        ? "Already working; wait for the current prompt to settle."
-        : "The backend is not ready; start a new session before submitting.")
+      this.addDiagnostic("The backend is not ready; start a new session before submitting.")
       return
     }
     await this.runPrompt(value)
   }
 
   updateDraft(text: string): void {
-    if ((this.stateValue.phase !== "starting" && this.stateValue.phase !== "failed") || this.stateValue.queuedPrompt === null) return
-    this.setState({ queuedPrompt: text })
+    if (this.stateValue.queuedPrompt === null) return
+    this.setState({ queuedPrompt: text.trim() ? text : null })
   }
 
   private async runPrompt(value: string): Promise<void> {
@@ -197,6 +199,7 @@ export class AppController {
         this.setState({ partialAssistantText: "", interruption: "cancelled" })
         this.reportPerf()
         this.setState({ phase: "ready", activity: { kind: "idle" }, backendMessage: "interrupted" })
+        void this.drainQueuedPrompt()
         return
       }
       this.assistantStream.preparePrompt()
@@ -214,6 +217,7 @@ export class AppController {
         activity: { kind: "idle" },
         backendMessage: result.stopReason === "cancelled" ? "interrupted" : null,
       })
+      void this.drainQueuedPrompt()
     } catch (error) {
       if (this.isClosing() || this.stateValue.phase === "failed") return
       this.turnPerf.mark("settled")

@@ -91,6 +91,21 @@ describe("real ACP TUI", () => {
     })
   }, 15_000)
 
+  it("queues and edits one follow-up without overlapping ACP prompts", async () => {
+    await withAcp("queued-follow-up", async (terminal) => {
+      terminal.write("first\r")
+      await pause(200)
+      terminal.write("second\r")
+      await terminal.waitForText("queued follow-up")
+      terminal.write(" edited")
+
+      await terminal.waitForText("first done")
+      await terminal.waitForText("follow-up:second edited")
+      expect(terminal.screenText()).not.toContain("private follow-up contents")
+      await exitTui(terminal)
+    })
+  }, 15_000)
+
   it("keeps partial evidence and marks an unknown outcome after backend exit", async () => {
     await withAcp("live-forced-exit", async (terminal) => {
       terminal.write("side effect\r")

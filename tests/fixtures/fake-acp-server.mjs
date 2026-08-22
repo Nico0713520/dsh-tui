@@ -136,6 +136,20 @@ input.on("line", (line) => {
   }
   if (scenario === "delayed" || scenario === "prompt-timeout") return
 
+  if (scenario === "queued-follow-up") {
+    const promptText = frame.params?.prompt?.[0]?.text ?? ""
+    if (promptCount === 1) {
+      setTimeout(() => {
+        assistant("first done")
+        result(frame.id, { stopReason: "end_turn" })
+      }, 3_000)
+    } else {
+      assistant(`follow-up:${promptText}`)
+      result(frame.id, { stopReason: "end_turn" })
+    }
+    return
+  }
+
   if (scenario === "live-stream") {
     liveRecords([
       { v: 1, sessionId: activeSessionId, seq: 1, kind: "turn-start", turn: 1 },
