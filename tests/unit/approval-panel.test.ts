@@ -19,6 +19,7 @@ const request: ApprovalRequest = {
   name: "bash",
   arguments: JSON.stringify({ command: "curl -H 'Authorization: sk-secret123' example.com" }),
   stakes: "critical",
+  workspace: "demo",
 }
 
 describe("ApprovalPanel", () => {
@@ -29,6 +30,13 @@ describe("ApprovalPanel", () => {
     expect(summary).toContain("[redacted]")
     expect(summary).not.toContain("sk-secret123")
     expect(summary.split("\n").every((line) => visibleWidth(line) <= 64)).toBe(true)
+    expect(summary.split("\n").map((line) => line.trimStart().split(/\s+/)[0])).toEqual([
+      "Approval",
+      "Tool",
+      "Action",
+      "Risk",
+      "Workspace",
+    ])
   })
 
   it("selects the offered decision and cancels on Escape", () => {
@@ -64,6 +72,7 @@ describe("ApprovalPanel", () => {
       name: "bash",
       arguments: "{\"command\":\"pwd\"}",
       stakes: "routine",
+      workspace: "demo",
     }, createUiTheme("terminal"), controller.signal)
 
     controller.abort()

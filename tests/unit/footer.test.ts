@@ -66,4 +66,28 @@ describe("adaptive footer", () => {
     expect(text).not.toContain("cached")
     expect(visibleWidth(text)).toBeLessThanOrEqual(48)
   })
+
+  it("distinguishes interruption from an unknown outcome", () => {
+    const theme = createUiTheme("terminal")
+    const interrupted = stripTerminalSequences(footerText(
+      { ...state, backendMessage: "interrupted", interruption: "cancelled" },
+      options,
+      80,
+      theme,
+    ))
+    const unknown = stripTerminalSequences(footerText(
+      {
+        ...state,
+        phase: "failed",
+        backendMessage: "Backend stopped; outcome unknown. Start a new session before retrying.",
+        interruption: "outcome-unknown",
+      },
+      options,
+      80,
+      theme,
+    ))
+
+    expect(interrupted).toContain("interrupted")
+    expect(unknown).toContain("outcome unknown")
+  })
 })

@@ -56,6 +56,7 @@ export interface ApprovalRequest {
   name: string
   arguments: string
   stakes: ApprovalStakes
+  workspace: string
 }
 
 export interface PermissionRequest {
@@ -334,6 +335,7 @@ export class AppController {
       name: call?.name ?? "tool",
       arguments: call?.arguments ?? "{}",
       stakes: classifyStakes(call?.name ?? "tool", parseArguments(call?.arguments ?? "{}")),
+      workspace: workspaceName(this.config.cwd),
     }
     this.setState({ activeOverlay: "approval", activity: { kind: "approval", name: approval.name } })
     try {
@@ -453,7 +455,9 @@ export class AppController {
     this.finishTurn(info.outcomeUnknown ? "outcome-unknown" : "failed")
     this.turnPerf.mark("settled")
     this.reportPerf()
-    this.fail(new Error(info.outcomeUnknown ? "Backend exited; prompt outcome is unknown." : "Backend exited."))
+    this.fail(new Error(info.outcomeUnknown
+      ? "Backend stopped; outcome unknown. Start a new session before retrying."
+      : "Backend stopped. Start a new session."))
   }
 
   async close(): Promise<void> {
@@ -618,4 +622,9 @@ function parseArguments(value: string): unknown {
     // command so destructive-pattern classification keeps working.
     return { command: value }
   }
+}
+
+function workspaceName(value: string): string {
+  const normalized = value.replace(/[\\/]+$/, "")
+  return normalized.split(/[\\/]/).at(-1) || "workspace"
 }

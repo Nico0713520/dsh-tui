@@ -45,5 +45,10 @@ export function sessionPanelText(options: SessionPanelOptions): string {
   ]
   const notice = state.backendMessage || state.interruption
   if (notice) rows.push(row("notice", notice))
+  if (state.phase === "failed") {
+    rows.push(row("recovery", state.interruption === "outcome-unknown"
+      ? "Start a new session before retrying; the previous result is unknown."
+      : "Start a new session before retrying."))
+  }
   return rows.join("\n")
 }

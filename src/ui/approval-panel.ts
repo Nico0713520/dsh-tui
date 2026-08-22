@@ -30,17 +30,22 @@ export function approvalPanelSummary(
   theme: UiTheme,
 ): string {
   const width = Math.max(1, columns)
-  const headline = theme.strong(theme.fg(stakesTone(request.stakes), `${request.stakes.toUpperCase()} APPROVAL`))
-  const target = redactSensitive(toolSummary(request.name, request.arguments, Math.max(8, width - 2)))
-  const guidance = request.stakes === "critical"
-    ? "Review carefully; this action may be difficult to reverse."
-    : request.stakes === "elevated"
-      ? "This action can change workspace or external state."
-      : "This action is expected to be read-only or low risk."
+  const labelWidth = width >= 40 ? 10 : 7
+  const row = (label: string, value: string): string => truncateToWidth(
+    `${theme.fg("muted", label.padEnd(labelWidth))}${theme.fg("text", value)}`,
+    width,
+    "…",
+  )
+  const combined = toolSummary(request.name, request.arguments, Math.max(8, width - labelWidth))
+  const action = combined.startsWith(`${request.name} `)
+    ? combined.slice(request.name.length + 1)
+    : combined === request.name ? "(no details)" : combined
   return [
-    truncateToWidth(headline, width, "…"),
-    truncateToWidth(theme.fg("text", target), width, "…"),
-    truncateToWidth(theme.fg("muted", guidance), width, "…"),
+    truncateToWidth(theme.strong(theme.fg(stakesTone(request.stakes), "Approval required")), width, "…"),
+    row("Tool", request.name),
+    row("Action", redactSensitive(action)),
+    row("Risk", request.stakes.toUpperCase()),
+    row("Workspace", request.workspace),
   ].join("\n")
 }
 
@@ -61,8 +66,8 @@ export class ApprovalPanel implements Component {
     const items: SelectItem[] = request.optionIds.map((optionId) => ({
       value: optionId,
       label: optionId.includes("allow")
-        ? theme.fg("success", "Allow this action")
-        : theme.fg("error", "Reject this action"),
+        ? theme.fg("success", "Allow once")
+        : theme.fg("error", "Reject"),
       description: optionId.includes("allow") ? "Continue once" : "Return a cancelled decision",
     }))
     this.list = new SelectList(items, Math.min(8, Math.max(1, items.length)), theme.select)

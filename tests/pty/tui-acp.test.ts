@@ -110,7 +110,7 @@ describe("real ACP TUI", () => {
     await withAcp("live-forced-exit", async (terminal) => {
       terminal.write("side effect\r")
       await terminal.waitForText("unknown evidence")
-      await terminal.waitForText("outcome is unknown")
+      await terminal.waitForText("Outcome unknown")
       expect(terminal.screenText()).toContain("unknown evidence")
       await exitTui(terminal)
     })
@@ -129,7 +129,7 @@ describe("real ACP TUI", () => {
     await withAcp("permission", async (terminal) => {
       const approvalStart = terminal.rawLength()
       terminal.write("run the command\r")
-      await terminal.waitForText("Allow this action", 8_000, approvalStart)
+      await terminal.waitForText("Allow once", 8_000, approvalStart)
       terminal.write("\r")
       await terminal.waitForText("allowed")
       await exitTui(terminal)
@@ -140,7 +140,7 @@ describe("real ACP TUI", () => {
     await withAcp("permission", async (terminal) => {
       const approvalStart = terminal.rawLength()
       terminal.write("run the command\r")
-      await terminal.waitForText("Allow this action", 8_000, approvalStart)
+      await terminal.waitForText("Allow once", 8_000, approvalStart)
       terminal.write("\u001b[B")
       await pause(80)
       terminal.write("\r")
@@ -153,7 +153,7 @@ describe("real ACP TUI", () => {
     await withAcp("permission", async (terminal) => {
       const approvalStart = terminal.rawLength()
       terminal.write("run the command\r")
-      await terminal.waitForText("Allow this action", 8_000, approvalStart)
+      await terminal.waitForText("Allow once", 8_000, approvalStart)
       terminal.write("\u001b")
       await terminal.waitForText("permission cancelled")
       expect(terminal.screenText()).not.toContain("unexpected-session-cancel")

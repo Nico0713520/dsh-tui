@@ -126,7 +126,7 @@ describe("complete visual layout matrix", () => {
         footerText(state, { mode: "acp", model: "deepseek-v4-flash", cwd: "/workspace/项目", elapsedSeconds: 3 }, width, theme),
         approvalPanelSummary({
           toolCallId: "call", optionIds: ["allow-once", "reject-once"], name: "bash",
-          arguments: "{\"command\":\"npm test\"}", stakes: "elevated",
+          arguments: "{\"command\":\"npm test\"}", stakes: "elevated", workspace: "项目",
         }, width, theme),
         sessionPanelText({ state, model: "deepseek-v4-flash", cwd: "/workspace/项目", mode: "acp", motion: "full", theme, columns: width }),
       ]

@@ -49,4 +49,23 @@ describe("Session Panel", () => {
     })
     expect(text.split("\n").every((line) => visibleWidth(line) <= 32)).toBe(true)
   })
+
+  it("shows a concrete recovery action after an unknown backend outcome", () => {
+    const text = stripTerminalSequences(sessionPanelText({
+      state: {
+        ...state,
+        phase: "failed",
+        backendMessage: "Backend stopped; outcome unknown.",
+        interruption: "outcome-unknown",
+      },
+      model: "deepseek-v4-flash",
+      cwd: "/workspace/demo",
+      mode: "acp",
+      motion: "off",
+      theme: createUiTheme("terminal"),
+      columns: 80,
+    }))
+
+    expect(text).toContain("Start a new session before retrying")
+  })
 })
