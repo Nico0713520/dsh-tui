@@ -90,6 +90,27 @@ describe("real Echo TUI", () => {
     }
   }, 15_000)
 
+  it("keeps Home and End available for prompt editing on the main screen", async () => {
+    const terminal = spawnTui(["src/main.ts", "--echo", "--motion", "off"], { cols: 80, rows: 24 })
+    try {
+      await terminal.waitForText("dsh-tui")
+      const start = terminal.rawLength()
+      terminal.write("ac")
+      terminal.write("\u001b[H")
+      terminal.write("b")
+      terminal.write("\u001b[F")
+      terminal.write("d\r")
+
+      await terminal.waitForText("[echo] bacd", 3_000, start)
+      terminal.write("\u0003")
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      terminal.write("\u0003")
+      await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
+    } finally {
+      terminal.kill()
+    }
+  }, 10_000)
+
   it("keeps the empty welcome composed while resizing from wide to text-only", async () => {
     const terminal = spawnTui(["src/main.ts", "--echo", "--motion", "off"], { cols: 120, rows: 30 })
     try {

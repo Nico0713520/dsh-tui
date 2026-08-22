@@ -6,7 +6,7 @@ import type { SessionLogEvent } from "./backend/session-log.ts"
 export interface ToolLifecycle {
   readonly name: string
   readonly arguments: string
-  readonly transcriptIndex: number
+  readonly transcriptItem: Extract<TranscriptItem, { kind: "tool-call" }> | null
   readonly startedAtMs: number
 }
 
@@ -25,12 +25,15 @@ export type ApplyLogResult = readonly TranscriptItem[] | null
  * JSONL fallback channel converge without double-rendering.
  */
 export class TranscriptBuilder {
+  private readonly now: () => number
   private readonly seenToolStarts = new Set<string>()
   private readonly seenToolEnds = new Set<string>()
   private readonly liveTools = new Map<string, ToolLifecycle>()
   private thinkingStartedAtMs: number | null = null
 
-  constructor(private readonly now: () => number = Date.now) {}
+  constructor(now: () => number = Date.now) {
+    this.now = now
+  }
 
   get isThinking(): boolean {
     return this.thinkingStartedAtMs !== null
@@ -60,14 +63,19 @@ export class TranscriptBuilder {
       return { transcript, accepted: false }
     }
     this.seenToolStarts.add(record.callId)
+    const transcriptItem: Extract<TranscriptItem, { kind: "tool-call" }> = {
+      kind: "tool-call",
+      name: record.name,
+      arguments: record.arguments,
+    }
     this.liveTools.set(record.callId, {
       name: record.name,
       arguments: record.arguments,
-      transcriptIndex: transcript.length,
+      transcriptItem,
       startedAtMs: this.now(),
     })
     return {
-      transcript: [...transcript, { kind: "tool-call", name: record.name, arguments: record.arguments }],
+      transcript: [...transcript, transcriptItem],
       accepted: true,
     }
   }
@@ -98,13 +106,18 @@ export class TranscriptBuilder {
   applyLogToolCall(event: Extract<SessionLogEvent, { kind: "tool-call" }>, transcript: readonly TranscriptItem[]): ApplyLogResult {
     if (this.seenToolStarts.has(event.callId) || this.seenToolEnds.has(event.callId)) return null
     this.seenToolStarts.add(event.callId)
+    const transcriptItem: Extract<TranscriptItem, { kind: "tool-call" }> = {
+      kind: "tool-call",
+      name: event.name,
+      arguments: event.arguments,
+    }
     this.liveTools.set(event.callId, {
       name: event.name,
       arguments: event.arguments,
-      transcriptIndex: transcript.length,
+      transcriptItem,
       startedAtMs: this.now(),
     })
-    return [...transcript, { kind: "tool-call", name: event.name, arguments: event.arguments }]
+    return [...transcript, transcriptItem]
   }
 
   /** Apply a JSONL fallback tool-result event; returns null when duplicate. */
@@ -124,11 +137,6 @@ export class TranscriptBuilder {
     return replaceOrAppend(transcript, tool, item)
   }
 
-  /** Remember a tool call name/args for permission approval lookup. */
-  rememberToolCall(callId: string, name: string, args: string): void {
-    this.liveTools.set(callId, { name, arguments: args, transcriptIndex: -1, startedAtMs: this.now() })
-  }
-
   lookupTool(callId: string): ToolLifecycle | undefined {
     return this.liveTools.get(callId)
   }
@@ -143,7 +151,10 @@ export class TranscriptBuilder {
 
 function replaceOrAppend(transcript: readonly TranscriptItem[], tool: ToolLifecycle | undefined, item: TranscriptItem): readonly TranscriptItem[] {
   const next = [...transcript]
-  if (tool && next[tool.transcriptIndex]?.kind === "tool-call") next[tool.transcriptIndex] = item
+  const index = tool?.transcriptItem === null || tool === undefined
+    ? -1
+    : next.findIndex((candidate) => candidate === tool.transcriptItem)
+  if (index >= 0 && next[index]?.kind === "tool-call") next[index] = item
   else next.push(item)
   return next
 }

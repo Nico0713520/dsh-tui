@@ -22,6 +22,10 @@ function createHarness(configOverride: Partial<AppConfig> = {}, now: () => numbe
   let loadHistoryImpl: () => Promise<HistoryEntry[]> = async () => []
   let chooseHistoryImpl: () => Promise<HistoryChoice> = async () => ({ kind: "cancel" })
   let approvalImpl: (request: ApprovalRequest) => Promise<PermissionDecision> = async () => ({ outcome: "cancelled" })
+  let lookupCallImpl: (callId: string) => { name: string; arguments: string } | undefined = () => ({
+    name: "bash",
+    arguments: JSON.stringify({ command: "rm -rf ." }),
+  })
   let sessionNumber = 0
   let activeSessionId: string | null = null
   let sessionGate: Promise<void> | null = null
@@ -62,7 +66,7 @@ function createHarness(configOverride: Partial<AppConfig> = {}, now: () => numbe
   const logs: FakeLogs = {
     watch(options) { logs.watched = options },
     stop() { cleanupOrder.push("logs") },
-    lookupCall() { return { name: "bash", arguments: JSON.stringify({ command: "rm -rf ." }) } },
+    lookupCall(callId) { return lookupCallImpl(callId) },
     async listHistory() { return listHistoryImpl() },
     async loadHistory() { return loadHistoryImpl() },
     emit(event) { logs.watched?.onEvent(event) },
@@ -99,6 +103,9 @@ function createHarness(configOverride: Partial<AppConfig> = {}, now: () => numbe
     },
     setApproval(impl: (request: ApprovalRequest) => Promise<PermissionDecision>) {
       approvalImpl = impl
+    },
+    setLookupCall(impl: (callId: string) => { name: string; arguments: string } | undefined) {
+      lookupCallImpl = impl
     },
     deferPrompt() {
       promptImpl = async () => new Promise((resolve) => {
@@ -175,6 +182,70 @@ describe("AppController", () => {
       isError: false,
       durationMs: 875,
     })
+    harness.finishPrompt()
+    await prompt
+  })
+
+  it("uses live tool metadata for approval when JSONL observation is disabled", async () => {
+    const harness = createHarness({ toolCards: false })
+    const approvals: ApprovalRequest[] = []
+    harness.setLookupCall(() => undefined)
+    harness.setApproval(async (request) => {
+      approvals.push(request)
+      return { outcome: "cancelled" }
+    })
+    harness.deferPrompt()
+    await harness.controller.start()
+    const prompt = harness.controller.submit("inspect")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    harness.controller.onLiveRecord({
+      v: 1, sessionId: "session-1", seq: 1, kind: "tool-start", turn: 1, step: 1,
+      callId: "call-1", name: "read_file", arguments: "{\"path\":\"README.md\"}",
+    })
+
+    await harness.controller.decidePermission({ toolCallId: "call-1", optionIds: ["allow-once", "reject-once"] })
+
+    expect(approvals).toEqual([expect.objectContaining({
+      toolCallId: "call-1",
+      name: "read_file",
+      arguments: "{\"path\":\"README.md\"}",
+      stakes: "routine",
+    })])
+    harness.finishPrompt()
+    await prompt
+  })
+
+  it("replaces the pending tool after a visible thinking trace is inserted", async () => {
+    let now = 1_000
+    const harness = createHarness({}, () => now)
+    harness.deferPrompt()
+    await harness.controller.start()
+    const prompt = harness.controller.submit("inspect")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    now = 1_500
+    harness.controller.onLiveRecord({
+      v: 1, sessionId: "session-1", seq: 1, kind: "tool-start", turn: 1, step: 1,
+      callId: "call-1", name: "read_file", arguments: "{\"path\":\"src/app.ts\"}",
+    })
+    now = 1_800
+    harness.controller.onLiveRecord({
+      v: 1, sessionId: "session-1", seq: 2, kind: "tool-end", turn: 1, step: 1,
+      callId: "call-1", isError: false, text: "contents",
+    })
+
+    expect(harness.controller.state.transcript).toEqual([
+      { kind: "user", text: "inspect" },
+      { kind: "thinking-trace", durationMs: 500 },
+      {
+        kind: "tool-result",
+        name: "read_file",
+        arguments: "{\"path\":\"src/app.ts\"}",
+        text: "contents",
+        isError: false,
+        durationMs: 300,
+      },
+    ])
     harness.finishPrompt()
     await prompt
   })

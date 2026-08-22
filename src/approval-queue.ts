@@ -1,9 +1,5 @@
 import type { PermissionDecision } from "./backend/acp-client.ts"
 
-export interface ApprovalRequestTask<T> {
-  run(): Promise<T>
-}
-
 export interface ApprovalQueueOptions {
   /** Milliseconds before an in-flight approval resolves as denied. Default 120s. */
   timeoutMs?: number
@@ -35,24 +31,25 @@ export class ApprovalQueue {
   }
 
   /** Queue a permission decision; runs after all earlier decisions settled. */
-  enqueue<T extends PermissionDecision>(task: () => Promise<T>): Promise<T> {
-    const run = (): Promise<T> => {
+  enqueue<T extends PermissionDecision>(task: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const run = async (): Promise<T> => {
       const startedAtMs = this.now()
+      const controller = new AbortController()
       let timer: ReturnType<typeof setTimeout> | undefined
-      return new Promise<T>((resolve) => {
+      const taskPromise = Promise.resolve()
+        .then(() => task(controller.signal))
+        .catch(() => ({ outcome: "cancelled" }) as T)
+      const timeoutPromise = new Promise<T>((resolve) => {
         timer = this.setTimeoutFn(() => {
           this.onTimeout?.(this.now() - startedAtMs)
+          controller.abort()
           resolve({ outcome: "cancelled" } as T)
         }, this.timeoutMs)
-        const settle = (decision: T) => {
-          if (timer !== undefined) this.clearTimeoutFn(timer)
-          resolve(decision)
-        }
-        task().then(
-          (decision) => settle(decision),
-          () => settle({ outcome: "cancelled" } as T),
-        )
+        timer.unref?.()
       })
+      const decision = await Promise.race([taskPromise, timeoutPromise])
+      if (timer !== undefined) this.clearTimeoutFn(timer)
+      return decision
     }
     const result = this.tail.then(run, run)
     this.tail = result.then(() => undefined, () => undefined)

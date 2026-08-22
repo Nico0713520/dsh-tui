@@ -86,10 +86,14 @@ export class ApprovalPanel implements Component {
 
   handleInput(data: string): void {
     if (matchesKey(data, "escape")) {
-      this.finish(null)
+      this.cancel()
       return
     }
     this.list.handleInput(data)
+  }
+
+  cancel(): void {
+    this.finish(null)
   }
 
   private finish(value: string | null): void {
@@ -104,11 +108,20 @@ export function showApprovalPanel(
   tui: TUI,
   request: ApprovalRequest,
   theme: UiTheme,
+  signal?: AbortSignal,
 ): Promise<string | null> {
   return new Promise((resolve) => {
-    const panel = new ApprovalPanel(request, resolve, theme)
+    let onAbort: (() => void) | undefined
+    const finish = (value: string | null) => {
+      if (onAbort) signal?.removeEventListener("abort", onAbort)
+      resolve(value)
+    }
+    const panel = new ApprovalPanel(request, finish, theme)
     const overlay = tui.showOverlay(panel, { width: "70%", minWidth: 30, maxHeight: 12, margin: 1 })
     panel.setOverlay(overlay)
     overlay.focus()
+    onAbort = () => panel.cancel()
+    if (signal?.aborted) panel.cancel()
+    else signal?.addEventListener("abort", onAbort, { once: true })
   })
 }

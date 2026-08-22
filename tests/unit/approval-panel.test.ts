@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest"
-import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui"
+import {
+  stripTerminalSequences,
+  visibleWidth,
+  type OverlayHandle,
+  type TUI,
+} from "@earendil-works/pi-tui"
 import type { ApprovalRequest } from "../../src/controller.ts"
-import { ApprovalPanel, approvalPanelSummary } from "../../src/ui/approval-panel.ts"
+import {
+  ApprovalPanel,
+  approvalPanelSummary,
+  showApprovalPanel,
+} from "../../src/ui/approval-panel.ts"
 import { createUiTheme } from "../../src/ui/theme.ts"
 
 const request: ApprovalRequest = {
@@ -33,5 +42,33 @@ describe("ApprovalPanel", () => {
     const second = new ApprovalPanel(request, (value) => cancelled.push(value), createUiTheme("terminal"))
     second.handleInput("\u001b")
     expect(cancelled).toEqual([null])
+  })
+
+  it("closes and settles when its active approval is aborted", async () => {
+    let hidden = 0
+    const overlay: OverlayHandle = {
+      hide() { hidden += 1 },
+      setHidden() {},
+      isHidden() { return false },
+      focus() {},
+      unfocus() {},
+      isFocused() { return true },
+    }
+    const tui = {
+      showOverlay() { return overlay },
+    } as unknown as TUI
+    const controller = new AbortController()
+    const result = showApprovalPanel(tui, {
+      toolCallId: "call-1",
+      optionIds: ["allow-once", "reject-once"],
+      name: "bash",
+      arguments: "{\"command\":\"pwd\"}",
+      stakes: "routine",
+    }, createUiTheme("terminal"), controller.signal)
+
+    controller.abort()
+
+    await expect(result).resolves.toBeNull()
+    expect(hidden).toBe(1)
   })
 })

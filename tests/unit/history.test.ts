@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises"
+import { mkdtemp, rm, writeFile, mkdir, utimes } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
@@ -39,6 +39,30 @@ describe("read-only history", () => {
       await writeFile(join(dir, "session.jsonl"), "not-json\n")
       const entries = await loadHistory(root, "/workspace/demo", "bad")
       expect(entries).toEqual([{ kind: "diagnostic", text: "History contains 1 malformed record(s)." }])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("selects the newest sessions before applying the history limit", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dsh-history-"))
+    try {
+      const project = join(root, projectKey("/workspace/demo"))
+      for (let index = 0; index <= 100; index += 1) {
+        const id = `session-${String(index).padStart(3, "0")}`
+        const dir = join(project, id)
+        const file = join(dir, "session.jsonl")
+        await mkdir(dir, { recursive: true })
+        await writeFile(file, `${JSON.stringify({ type: "session/title", data: { title: id } })}\n`)
+        const timestamp = new Date(1_700_000_000_000 + index * 1_000)
+        await utimes(file, timestamp, timestamp)
+      }
+
+      const listed = await listHistory(root, "/workspace/demo")
+
+      expect(listed).toHaveLength(100)
+      expect(listed[0]?.id).toBe("session-100")
+      expect(listed.some((session) => session.id === "session-000")).toBe(false)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

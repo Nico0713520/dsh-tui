@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile, mkdir, rename } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
@@ -9,10 +9,10 @@ import {
   type SessionLogEvent,
 } from "../../src/backend/session-log.ts"
 
-async function waitFor(predicate: () => boolean): Promise<void> {
+async function waitFor(predicate: () => boolean, timeoutMs = 8_000): Promise<void> {
   const started = Date.now()
   while (!predicate()) {
-    if (Date.now() - started > 8_000) throw new Error("log event did not arrive")
+    if (Date.now() - started > timeoutMs) throw new Error("log event did not arrive")
     await new Promise((resolve) => setTimeout(resolve, 10))
   }
 }
@@ -107,6 +107,32 @@ describe("SessionLogReader", () => {
       await new Promise((resolve) => setTimeout(resolve, 20))
       await writeFile(file, second)
       await waitFor(() => events.length === 2)
+      expect(events.map((event) => event.kind === "tool-call" ? event.callId : "")).toEqual(["a", "b"])
+      reader.stop()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("reopens a log atomically replaced at the watched path", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dsh-log-"))
+    try {
+      const dir = join(root, projectKey("/workspace/demo"), "atomic")
+      await mkdir(dir, { recursive: true })
+      const file = join(dir, "session.jsonl")
+      const replacement = join(dir, "session.next.jsonl")
+      const reader = new SessionLogReader({ pollIntervalMs: 5 })
+      const events: SessionLogEvent[] = []
+      reader.watch({ persistRoot: root, cwd: "/workspace/demo", sessionId: "atomic", onEvent: (event) => events.push(event) })
+      const first = JSON.stringify({ type: "tool/call", data: { callId: "a", name: "read", arguments: "{}" } }) + "\n"
+      const second = JSON.stringify({ type: "tool/call", data: { callId: "b", name: "read", arguments: "{}" } }) + "\n"
+      await writeFile(file, first)
+      await waitFor(() => events.length === 1)
+
+      await writeFile(replacement, second)
+      await rename(replacement, file)
+
+      await waitFor(() => events.length === 2, 750)
       expect(events.map((event) => event.kind === "tool-call" ? event.callId : "")).toEqual(["a", "b"])
       reader.stop()
     } finally {

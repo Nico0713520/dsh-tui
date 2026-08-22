@@ -303,18 +303,16 @@ function parseEvent(record: unknown, callNames: Map<string, { name: string; argu
 interface ReadRecordsResult {
   records: RecordValue[]
   malformed: number
-  truncated: boolean
 }
 
 /** Bytes read from a history file when listing sessions; enough for title and
  * first user message without loading multi-megabyte transcripts. */
 export const HISTORY_LIST_READ_LIMIT = 64 * 1024
-/** Maximum number of session directories scanned per history listing. */
+/** Maximum number of newest session heads read and returned per history listing. */
 export const HISTORY_LIST_ENTRY_LIMIT = 100
 
 async function readRecords(filePath: string, byteLimit?: number): Promise<ReadRecordsResult> {
   let content: string
-  let truncated = false
   if (byteLimit === undefined) {
     content = await readFile(filePath, "utf8")
   } else {
@@ -322,8 +320,6 @@ async function readRecords(filePath: string, byteLimit?: number): Promise<ReadRe
     try {
       const buffer = Buffer.allocUnsafe(byteLimit)
       const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
-      const metadata = await handle.stat()
-      truncated = bytesRead < metadata.size
       content = buffer.subarray(0, bytesRead).toString("utf8")
     } finally {
       await handle.close()
@@ -341,7 +337,7 @@ async function readRecords(filePath: string, byteLimit?: number): Promise<ReadRe
       malformed += 1
     }
   }
-  return { records, malformed, truncated }
+  return { records, malformed }
 }
 
 function firstText(value: unknown): string {
@@ -364,21 +360,31 @@ export async function listHistory(persistRoot: string, cwd: string): Promise<Ses
     if (isMissing(error)) return []
     throw error
   }
-  const directories = entries.filter((entry) => entry.isDirectory())
-  if (directories.length > HISTORY_LIST_ENTRY_LIMIT) directories.length = HISTORY_LIST_ENTRY_LIMIT
-  const sessions = await Promise.all(directories.map(async (entry) => {
+  const candidates = await Promise.all(entries.filter((entry) => entry.isDirectory()).map(async (entry) => {
     const filePath = join(root, entry.name, "session.jsonl")
     try {
       const metadata = await stat(filePath)
-      const { records } = await readRecords(filePath, HISTORY_LIST_READ_LIMIT)
+      return { id: entry.name, filePath, mtimeMs: metadata.mtimeMs }
+    } catch (error) {
+      if (isMissing(error)) return null
+      throw error
+    }
+  }))
+  const newest = candidates
+    .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .slice(0, HISTORY_LIST_ENTRY_LIMIT)
+  const sessions = await Promise.all(newest.map(async (candidate) => {
+    try {
+      const { records } = await readRecords(candidate.filePath, HISTORY_LIST_READ_LIMIT)
       const titleRecord = records.find((record) => record.type === "session/title")
       const title = isRecord(titleRecord?.data) && typeof titleRecord.data.title === "string"
         ? titleRecord.data.title
         : ""
       const userRecord = records.find((record) => record.type === "user/message" && !isToolMessage(record))
       return {
-        id: entry.name,
-        mtimeMs: metadata.mtimeMs,
+        id: candidate.id,
+        mtimeMs: candidate.mtimeMs,
         title,
         firstUserMessage: firstText(userRecord),
       }
@@ -387,7 +393,7 @@ export async function listHistory(persistRoot: string, cwd: string): Promise<Ses
       throw error
     }
   }))
-  return sessions.filter((session): session is SessionInfo => session !== null).sort((a, b) => b.mtimeMs - a.mtimeMs)
+  return sessions.filter((session): session is SessionInfo => session !== null)
 }
 
 export async function loadHistory(persistRoot: string, cwd: string, sessionId: string): Promise<HistoryEntry[]> {

@@ -57,7 +57,7 @@ export type HistoryChoice =
 
 export interface ControllerView {
   render(state: AppState): void
-  requestApproval(request: ApprovalRequest): Promise<PermissionDecision>
+  requestApproval(request: ApprovalRequest, signal?: AbortSignal): Promise<PermissionDecision>
   chooseHistory(items: readonly SessionInfo[]): Promise<HistoryChoice>
   prepareShutdown?(): void
   dismissOverlays?(): void
@@ -292,12 +292,13 @@ export class AppController {
   }
 
   decidePermission(request: PermissionRequest): Promise<PermissionDecision> {
-    return this.approvalQueue.enqueue(() => this.runPermissionRequest(request))
+    return this.approvalQueue.enqueue((signal) => this.runPermissionRequest(request, signal))
   }
 
-  private async runPermissionRequest(request: PermissionRequest): Promise<PermissionDecision> {
+  private async runPermissionRequest(request: PermissionRequest, signal: AbortSignal): Promise<PermissionDecision> {
     if (this.stateValue.phase === "closing") return { outcome: "cancelled" }
-    const call = this.logs.lookupCall(request.toolCallId)
+    const call = this.transcriptBuilder.lookupTool(request.toolCallId)
+      ?? this.logs.lookupCall(request.toolCallId)
     const approval: ApprovalRequest = {
       toolCallId: request.toolCallId,
       optionIds: request.optionIds,
@@ -307,7 +308,7 @@ export class AppController {
     }
     this.setState({ activeOverlay: "approval", activity: { kind: "approval", name: approval.name } })
     try {
-      const decision = await this.view.requestApproval(approval)
+      const decision = await this.view.requestApproval(approval, signal)
       return decision.outcome === "selected" && request.optionIds.includes(decision.optionId)
         ? decision
         : { outcome: "cancelled" }
