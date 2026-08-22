@@ -26,6 +26,8 @@ export class WelcomeTranscriptComponent implements Component {
   private readonly capabilities: TerminalCapabilities
   private readonly assetPath: string | URL
   private readonly logoCache = new Map<string, Component | null>()
+  private cachedWidth: number | null = null
+  private cachedLines: string[] | null = null
 
   constructor(options: WelcomePanelOptions & {
     capabilities: TerminalCapabilities
@@ -38,12 +40,19 @@ export class WelcomeTranscriptComponent implements Component {
   }
 
   update(options: WelcomePanelOptions): void {
+    const presentationChanged = options.model !== this.options.model
+      || options.cwd !== this.options.cwd
+      || options.phase !== this.options.phase
+      || options.theme !== this.options.theme
     this.options = options
+    if (presentationChanged) this.clearRenderCache()
   }
 
   render(width: number): string[] {
     const columns = Math.max(1, width)
-    return new WelcomeCard({
+    if (this.cachedLines !== null && this.cachedWidth === columns) return this.cachedLines
+    this.cachedWidth = columns
+    this.cachedLines = new WelcomeCard({
       columns,
       logo: columns >= 48 ? this.logo(columns) : null,
       model: this.options.model,
@@ -51,10 +60,17 @@ export class WelcomeTranscriptComponent implements Component {
       phase: this.options.phase,
       theme: this.options.theme,
     }).render(columns)
+    return this.cachedLines
   }
 
   invalidate(): void {
+    this.clearRenderCache()
     for (const logo of this.logoCache.values()) logo?.invalidate()
+  }
+
+  private clearRenderCache(): void {
+    this.cachedWidth = null
+    this.cachedLines = null
   }
 
   private logo(columns: number): Component | null {

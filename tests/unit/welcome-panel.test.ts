@@ -70,4 +70,24 @@ describe("welcome presentation", () => {
     expect(text).toContain("Tips for getting started")
     expect(text).toContain("Quick actions")
   })
+
+  it("reuses the settled card across animation-only ticks", () => {
+    const component = new WelcomeTranscriptComponent({
+      ...base,
+      columns: 120,
+      capabilities: textCapabilities,
+      assetPath,
+    })
+    const first = component.render(120)
+
+    component.update({
+      ...base,
+      columns: 120,
+      tick: { frame: 2, completion: false, settled: true },
+    })
+    expect(component.render(120)).toBe(first)
+
+    component.update({ ...base, columns: 120, phase: "working" })
+    expect(component.render(120)).not.toBe(first)
+  })
 })

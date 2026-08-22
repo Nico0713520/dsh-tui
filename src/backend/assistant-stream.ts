@@ -26,12 +26,18 @@ export function createAssistantStream(): AssistantStream {
   let promptObservedTurn = false
   let requireTurnStart = false
   const blocks = new Map<string, { turn: number; step: number; index: number; text: string }>()
+  const orderedKeys: string[] = []
+
+  const clearBlocks = (): void => {
+    blocks.clear()
+    orderedKeys.length = 0
+  }
 
   const snapshot = (acceptedRecord = false): AssistantStreamSnapshot => Object.freeze({ ...state, acceptedRecord })
 
   return {
     begin(sessionId) {
-      blocks.clear()
+      clearBlocks()
       highestSeq = -1
       promptTurnFloor = null
       promptObservedTurn = false
@@ -40,7 +46,7 @@ export function createAssistantStream(): AssistantStream {
       return snapshot()
     },
     preparePrompt() {
-      blocks.clear()
+      clearBlocks()
       promptTurnFloor = state.turn === null ? 0 : state.turn + 1
       promptObservedTurn = false
       state = { ...state, text: "", activity: "idle", committed: false, interruption: null }
@@ -61,7 +67,7 @@ export function createAssistantStream(): AssistantStream {
         requireTurnStart = false
         if (state.committed) state = { ...state, turn: record.turn }
         else {
-          blocks.clear()
+          clearBlocks()
           state = {
             ...state,
             turn: record.turn,
@@ -80,7 +86,7 @@ export function createAssistantStream(): AssistantStream {
       }
       if (state.turn !== null && record.turn < state.turn) return snapshot()
       if (state.turn === null || record.turn > state.turn) {
-        blocks.clear()
+        clearBlocks()
         state = {
           ...state,
           turn: record.turn,
@@ -105,10 +111,14 @@ export function createAssistantStream(): AssistantStream {
           index: record.index,
           text: record.kind === "text-final" ? record.text : `${previous?.text ?? ""}${record.text}`,
         })
+        if (previous === undefined) {
+          orderedKeys.push(key)
+          orderedKeys.sort((left, right) => compareBlocks(blocks.get(left)!, blocks.get(right)!))
+        }
         state = {
           ...state,
           turn: record.turn,
-          text: orderedText(blocks),
+          text: orderedText(blocks, orderedKeys),
           activity: "responding",
           committed: false,
           interruption: null,
@@ -128,7 +138,7 @@ export function createAssistantStream(): AssistantStream {
       return snapshot()
     },
     reset() {
-      blocks.clear()
+      clearBlocks()
       highestSeq = -1
       promptTurnFloor = null
       promptObservedTurn = false
@@ -150,9 +160,14 @@ function emptySnapshot(): Omit<AssistantStreamSnapshot, "acceptedRecord"> {
   }
 }
 
-function orderedText(blocks: ReadonlyMap<string, { turn: number; step: number; index: number; text: string }>): string {
-  return [...blocks.values()]
-    .sort((left, right) => left.turn - right.turn || left.step - right.step || left.index - right.index)
-    .map((block) => block.text)
+type TextBlock = { turn: number; step: number; index: number; text: string }
+
+function compareBlocks(left: TextBlock, right: TextBlock): number {
+  return left.turn - right.turn || left.step - right.step || left.index - right.index
+}
+
+function orderedText(blocks: ReadonlyMap<string, TextBlock>, orderedKeys: readonly string[]): string {
+  return orderedKeys
+    .map((key) => blocks.get(key)!.text)
     .join("")
 }

@@ -183,10 +183,9 @@ export class AppView implements ControllerView {
     })
     this.pulseClock = new VisualClock(this.motion, (tick) => {
       this.pulseTick = tick
-      this.updateWelcome()
       this.updateActivity()
       for (const component of this.committedTranscript.children) {
-        if (component instanceof ToolCardComponent) component.setFrame(tick.frame)
+        if (component instanceof ToolCardComponent && component.isPending()) component.setFrame(tick.frame)
       }
       this.tui.requestRender()
     })
@@ -446,7 +445,6 @@ export class AppView implements ControllerView {
       sessionId: state?.sessionId ?? null,
       theme: this.theme,
     })
-    this.welcome.invalidate()
   }
 
   private updateStatus(): void {

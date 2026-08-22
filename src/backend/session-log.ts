@@ -140,8 +140,8 @@ export class SessionLogReader {
     return this.callNames.get(callId)
   }
 
-  listHistory(persistRoot: string, cwd: string): Promise<SessionInfo[]> {
-    return listHistory(persistRoot, cwd)
+  listHistory(persistRoot: string, cwd: string, options?: HistoryListOptions): Promise<SessionInfo[]> {
+    return listHistory(persistRoot, cwd, options)
   }
 
   loadHistory(persistRoot: string, cwd: string, sessionId: string): Promise<HistoryEntry[]> {
@@ -309,7 +309,12 @@ interface ReadRecordsResult {
  * first user message without loading multi-megabyte transcripts. */
 export const HISTORY_LIST_READ_LIMIT = 64 * 1024
 /** Maximum number of newest session heads read and returned per history listing. */
-export const HISTORY_LIST_ENTRY_LIMIT = 100
+export const HISTORY_LIST_ENTRY_LIMIT = 50
+
+export interface HistoryListOptions {
+  limit?: number
+  previewBytes?: number
+}
 
 async function readRecords(filePath: string, byteLimit?: number): Promise<ReadRecordsResult> {
   let content: string
@@ -351,7 +356,11 @@ function isToolMessage(value: unknown): boolean {
   return value.data.message.content.some(isToolResultBlock)
 }
 
-export async function listHistory(persistRoot: string, cwd: string): Promise<SessionInfo[]> {
+export async function listHistory(
+  persistRoot: string,
+  cwd: string,
+  options: HistoryListOptions = {},
+): Promise<SessionInfo[]> {
   const root = join(persistRoot, projectKey(cwd))
   let entries
   try {
@@ -373,10 +382,11 @@ export async function listHistory(persistRoot: string, cwd: string): Promise<Ses
   const newest = candidates
     .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
     .sort((a, b) => b.mtimeMs - a.mtimeMs)
-    .slice(0, HISTORY_LIST_ENTRY_LIMIT)
+    .slice(0, Math.max(0, Math.floor(options.limit ?? HISTORY_LIST_ENTRY_LIMIT)))
   const sessions = await Promise.all(newest.map(async (candidate) => {
     try {
-      const { records } = await readRecords(candidate.filePath, HISTORY_LIST_READ_LIMIT)
+      const previewBytes = Math.max(1, Math.floor(options.previewBytes ?? HISTORY_LIST_READ_LIMIT))
+      const { records } = await readRecords(candidate.filePath, previewBytes)
       const titleRecord = records.find((record) => record.type === "session/title")
       const title = isRecord(titleRecord?.data) && typeof titleRecord.data.title === "string"
         ? titleRecord.data.title

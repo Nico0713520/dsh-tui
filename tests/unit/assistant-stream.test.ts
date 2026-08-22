@@ -135,4 +135,36 @@ describe("AssistantStream", () => {
       text: "current",
     })).toMatchObject({ text: "current", acceptedRecord: true })
   })
+
+  it("keeps one hot block exact across ten thousand deltas", () => {
+    const stream = createAssistantStream()
+    stream.begin("s-1")
+    stream.preparePrompt()
+    stream.apply({ v: 1, sessionId: "s-1", seq: 1, kind: "turn-start", turn: 1 })
+
+    let snapshot = stream.apply({
+      v: 1,
+      sessionId: "s-1",
+      seq: 2,
+      kind: "text-delta",
+      turn: 1,
+      step: 2,
+      index: 1,
+      text: "tail",
+    })
+    for (let index = 0; index < 10_000; index += 1) {
+      snapshot = stream.apply({
+        v: 1,
+        sessionId: "s-1",
+        seq: index + 3,
+        kind: "text-delta",
+        turn: 1,
+        step: 1,
+        index: 0,
+        text: "x",
+      })
+    }
+
+    expect(snapshot.text).toBe(`${"x".repeat(10_000)}tail`)
+  })
 })

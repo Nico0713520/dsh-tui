@@ -44,7 +44,7 @@ describe("read-only history", () => {
     }
   })
 
-  it("selects the newest sessions before applying the history limit", async () => {
+  it("selects the newest sessions before applying the configurable history limit", async () => {
     const root = await mkdtemp(join(tmpdir(), "dsh-history-"))
     try {
       const project = join(root, projectKey("/workspace/demo"))
@@ -59,10 +59,14 @@ describe("read-only history", () => {
       }
 
       const listed = await listHistory(root, "/workspace/demo")
+      const limited = await listHistory(root, "/workspace/demo", { limit: 7, previewBytes: 1_024 })
 
-      expect(listed).toHaveLength(100)
+      expect(listed).toHaveLength(50)
       expect(listed[0]?.id).toBe("session-100")
       expect(listed.some((session) => session.id === "session-000")).toBe(false)
+      expect(limited).toHaveLength(7)
+      expect(limited[0]?.id).toBe("session-100")
+      expect(limited[6]?.id).toBe("session-094")
     } finally {
       await rm(root, { recursive: true, force: true })
     }

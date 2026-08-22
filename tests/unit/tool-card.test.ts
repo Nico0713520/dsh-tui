@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui"
 import type { TranscriptItem } from "../../src/controller.ts"
-import { toolCardText } from "../../src/ui/tool-card.ts"
+import { ToolCardComponent, toolCardText } from "../../src/ui/tool-card.ts"
 import { createUiTheme } from "../../src/ui/theme.ts"
 
 const theme = createUiTheme("terminal")
@@ -48,5 +48,24 @@ describe("tool cards", () => {
     const light = createUiTheme("deepseek")
     expect(toolCardText(result, { columns: 48, expanded: false, frame: 0, theme: light }))
       .toContain("\x1b[48;2;234;247;240m")
+  })
+
+  it("animates only pending cards and reuses completed render output", () => {
+    const pending = new ToolCardComponent(
+      { kind: "tool-call", name: "read_file", arguments: result.arguments },
+      { expanded: false, frame: 0, theme },
+    )
+    const completed = new ToolCardComponent(result, { expanded: false, frame: 0, theme })
+
+    expect(pending.isPending()).toBe(true)
+    expect(completed.isPending()).toBe(false)
+
+    const first = completed.render(80)
+    completed.setFrame(3)
+    expect(completed.render(80)).toBe(first)
+
+    const pendingFirst = pending.render(80)
+    pending.setFrame(1)
+    expect(pending.render(80)).not.toBe(pendingFirst)
   })
 })

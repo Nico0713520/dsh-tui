@@ -72,6 +72,8 @@ export class ToolCardComponent implements Component {
   private expanded: boolean
   private frame: number
   private readonly theme: UiTheme
+  private cachedWidth: number | null = null
+  private cachedLines: string[] | null = null
 
   constructor(item: ToolItem, options: Omit<ToolCardOptions, "columns">) {
     this.item = item
@@ -81,27 +83,44 @@ export class ToolCardComponent implements Component {
   }
 
   setItem(item: ToolItem): void {
+    if (this.item === item) return
     this.item = item
+    this.invalidate()
   }
 
   setExpanded(expanded: boolean): void {
+    if (this.expanded === expanded) return
     this.expanded = expanded
+    this.invalidate()
   }
 
   setFrame(frame: number): void {
+    if (!this.isPending() || this.frame === frame) return
     this.frame = frame
+    this.invalidate()
+  }
+
+  isPending(): boolean {
+    return this.item.kind === "tool-call"
   }
 
   render(width: number): string[] {
-    return toolCardText(this.item, {
-      columns: Math.max(1, width),
+    const columns = Math.max(1, width)
+    if (this.cachedLines !== null && this.cachedWidth === columns) return this.cachedLines
+    this.cachedWidth = columns
+    this.cachedLines = toolCardText(this.item, {
+      columns,
       expanded: this.expanded,
       frame: this.frame,
       theme: this.theme,
     }).split("\n")
+    return this.cachedLines
   }
 
-  invalidate(): void {}
+  invalidate(): void {
+    this.cachedWidth = null
+    this.cachedLines = null
+  }
 }
 
 export function toolCardComponent(
