@@ -60,6 +60,14 @@ describe("loadConfig", () => {
     expect(() => loadConfig([], { DSH_TUI_PERF: "yes" }, "linux")).toThrow(/perf/i)
   })
 
+  it("defaults to quick reasoning and maps deep explicitly", () => {
+    expect(loadConfig([], {}, "linux").reasoningMode).toBe("quick")
+    expect(loadConfig(["--effort", "deep"], {}, "linux").reasoningMode).toBe("deep")
+    expect(loadConfig([], { DSH_TUI_EFFORT: "deep" }, "linux").reasoningMode).toBe("deep")
+    expect(loadConfig(["--effort", "quick"], { DSH_TUI_EFFORT: "deep" }, "linux").reasoningMode).toBe("quick")
+    expect(() => loadConfig(["--effort", "maximum"], {}, "linux")).toThrow(/effort/i)
+  })
+
   it("resolves theme precedence from CLI, environment, saved preference, then terminal", () => {
     expect(loadConfig([], {}, "linux").theme).toBe("terminal")
     expect(loadConfig([], {}, "linux", { theme: "deepseek" }).theme).toBe("deepseek")

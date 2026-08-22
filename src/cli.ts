@@ -29,6 +29,7 @@ Options:
   --backend-command-json <json>  Explicit ACP command array, no shell splitting
   --motion <full|reduced|off>    Control the non-blocking entrance motion
   --theme <terminal|deepseek>    Override the saved appearance preference
+  --effort <quick|deep>          Quick uses low reasoning; deep uses max reasoning
   --perf                         Show sanitized turn latency diagnostics
   --help                         Show this help
   --version                      Show the version

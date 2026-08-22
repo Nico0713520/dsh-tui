@@ -5,6 +5,7 @@ import type { ThemePreference, UiPreferences } from "./preferences.ts"
 
 export type RunMode = "acp" | "echo"
 export type MotionPreference = "full" | "reduced" | "off"
+export type ReasoningMode = "quick" | "deep"
 
 export interface AppConfig {
   mode: RunMode
@@ -15,6 +16,7 @@ export interface AppConfig {
   motion: MotionPreference
   theme: ThemePreference
   perf: boolean
+  reasoningMode: ReasoningMode
   backendCommand?: readonly string[]
 }
 
@@ -29,6 +31,7 @@ interface ParsedValues {
   motion?: string
   theme?: string
   perf?: boolean
+  effort?: string
 }
 
 const OPTIONS = {
@@ -42,6 +45,7 @@ const OPTIONS = {
   motion: { type: "string" },
   theme: { type: "string" },
   perf: { type: "boolean" },
+  effort: { type: "string" },
   help: { type: "boolean" },
   version: { type: "boolean" },
 } as const
@@ -114,6 +118,10 @@ export function loadConfig(
   if (perfValue !== "0" && perfValue !== "1") {
     throw new Error(`perf must be 0 or 1; received ${JSON.stringify(perfValue)}`)
   }
+  const requestedEffort = parsed.effort ?? env.DSH_TUI_EFFORT ?? "quick"
+  if (requestedEffort !== "quick" && requestedEffort !== "deep") {
+    throw new Error(`effort must be quick or deep; received ${JSON.stringify(requestedEffort)}`)
+  }
 
   return {
     mode: modeValue,
@@ -124,6 +132,7 @@ export function loadConfig(
     motion,
     theme: requestedTheme,
     perf: perfValue === "1",
+    reasoningMode: requestedEffort,
     ...(backendCommand === undefined ? {} : { backendCommand }),
   }
 }

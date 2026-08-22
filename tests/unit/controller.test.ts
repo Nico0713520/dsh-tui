@@ -13,6 +13,7 @@ const config: AppConfig = {
   motion: "full",
   theme: "terminal",
   perf: false,
+  reasoningMode: "quick",
 }
 
 function createHarness(configOverride: Partial<AppConfig> = {}, now: () => number = Date.now) {

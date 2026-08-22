@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { mkdtemp, rm } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import { runCli, type CliDependencies } from "../../src/cli.ts"
+import { HELP, runCli, type CliDependencies } from "../../src/cli.ts"
 import { describeDeepSeekCredential } from "../../src/credentials.ts"
 
 const roots: string[] = []
@@ -43,6 +43,11 @@ async function harness(secret = "unit-test-secret") {
 }
 
 describe("dsh-tui CLI authentication", () => {
+  it("documents the quick and deep reasoning modes", () => {
+    expect(HELP).toContain("--effort <quick|deep>")
+    expect(HELP).toMatch(/Quick uses low reasoning; deep uses max reasoning/i)
+  })
+
   it("logs in once, reports redacted status, and logs out", async () => {
     const test = await harness()
 

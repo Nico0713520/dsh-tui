@@ -22,6 +22,7 @@ const child = spawn(process.execPath, [backendBin, "--config", configPath], {
     ...process.env,
     DSH_MODEL: "deepseek-v4-flash",
     DSH_PERSIST_ROOT: root,
+    DSH_REASONING_EFFORT: "low",
     DEEPSEEK_API_KEY: "composition-smoke-placeholder",
   },
   stdio: ["pipe", "pipe", "pipe"],

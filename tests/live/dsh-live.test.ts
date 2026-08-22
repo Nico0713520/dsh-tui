@@ -38,6 +38,7 @@ describe("live dsh ACP flow", () => {
       motion: "off",
       theme: "terminal",
       perf: false,
+      reasoningMode: "quick",
     }
     const states: AppState[] = []
     const permissionRequests: ApprovalRequest[] = []

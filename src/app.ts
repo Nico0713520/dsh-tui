@@ -72,6 +72,18 @@ export function resolveBrandAsset(moduleUrl: string = import.meta.url): string {
   return fileURLToPath(new URL("../assets/brand/deepseek-whale.png.base64", moduleUrl))
 }
 
+export function resolveBackendEnvironment(
+  config: AppConfig,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  return {
+    ...baseEnv,
+    DSH_MODEL: config.model,
+    DSH_PERSIST_ROOT: config.persistRoot,
+    DSH_REASONING_EFFORT: config.reasoningMode === "deep" ? "max" : "low",
+  }
+}
+
 export async function runApp(config: AppConfig): Promise<number> {
   const view = new AppView({
     mode: config.mode,
@@ -101,7 +113,7 @@ export async function runApp(config: AppConfig): Promise<number> {
         command: config.backendCommand ?? resolveDefaultBackendCommand(config),
         cwd: config.cwd,
         events: backendEvents,
-        env: { ...process.env, DSH_MODEL: config.model, DSH_PERSIST_ROOT: config.persistRoot },
+        env: resolveBackendEnvironment(config),
       })
 
   controller = new AppController({ config, backend, logs, view })
