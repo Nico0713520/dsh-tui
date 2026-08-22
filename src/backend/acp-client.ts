@@ -190,6 +190,7 @@ export class AcpClient {
     this.promptInFlight = true
     this.promptRequestSent = false
     this.promptCancelRequested = false
+    let liveBoundarySettled = false
     try {
       const sessionId = this.sessionId ?? await this.createSession()
       const child = this.process
@@ -210,9 +211,15 @@ export class AcpClient {
         sessionId,
         prompt: [{ type: "text", text }],
       })
+      this.liveBoundaryRequired = true
+      await this.synchronizeLiveEvents()
+      liveBoundarySettled = true
       return { stopReason: result.stopReason }
     } finally {
-      if (this.promptRequestSent) this.liveBoundaryRequired = true
+      if (this.promptRequestSent && !liveBoundarySettled) {
+        this.liveBoundaryRequired = true
+        this.liveBoundaryPrepared = false
+      }
       this.promptInFlight = false
       this.promptRequestSent = false
       this.promptCancelRequested = false

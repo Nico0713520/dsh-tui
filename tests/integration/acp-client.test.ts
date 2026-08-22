@@ -81,13 +81,11 @@ describe("AcpClient", () => {
     await acp.close()
   })
 
-  it("waits for the live pipe barrier before opening the next prompt boundary", async () => {
+  it("waits for the live pipe barrier before resolving the current prompt", async () => {
     const events = createEvents()
     const acp = client("live-stream", events)
     await acp.newSession()
     await expect(acp.prompt("hello")).resolves.toEqual({ stopReason: "end_turn" })
-
-    await acp.synchronizeLiveEvents()
 
     expect(events.live.map((record) => record.kind)).toEqual([
       "turn-start",
@@ -113,16 +111,18 @@ describe("AcpClient", () => {
     await acp.close()
   })
 
-  it("does not reuse a dead session when the backend exits during a live barrier", async () => {
+  it("recreates instead of reusing a backend that exits after an authoritative prompt result", async () => {
     const events = createEvents()
     const acp = client("barrier-exit", events, { "session/prompt": 500 })
     await acp.newSession()
     await expect(acp.prompt("first")).resolves.toEqual({ stopReason: "end_turn" })
-
-    await expect(acp.prompt("second")).rejects.toThrow(/exited|synchronization|session/i)
     await waitFor(() => events.exits.length === 1)
+    expect(acp.activeSessionId).toBeNull()
 
-    expect(events.exits).toEqual([{ outcomeUnknown: false }])
+    await expect(acp.prompt("second")).resolves.toEqual({ stopReason: "end_turn" })
+    await waitFor(() => events.exits.length === 2)
+
+    expect(events.exits).toEqual([{ outcomeUnknown: false }, { outcomeUnknown: false }])
     expect(acp.activeSessionId).toBeNull()
     await acp.close()
   })

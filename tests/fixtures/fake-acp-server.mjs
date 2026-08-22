@@ -5,6 +5,9 @@ import { Socket } from "node:net"
 const scenario = process.env.FAKE_ACP_SCENARIO ?? "normal"
 const permissionCancelledText = process.env.FAKE_ACP_PERMISSION_CANCELLED_TEXT ?? "cancelled"
 const permissionDelayMs = Number.parseInt(process.env.FAKE_ACP_PERMISSION_DELAY_MS ?? "0", 10) || 0
+const stressTextChunks = Math.max(0, Number.parseInt(process.env.FAKE_ACP_TEXT_CHUNKS ?? "0", 10) || 0)
+const stressToolCalls = Math.max(0, Number.parseInt(process.env.FAKE_ACP_TOOL_CALLS ?? "0", 10) || 0)
+const stressChunkDelayMs = Math.max(0, Number.parseInt(process.env.FAKE_ACP_CHUNK_DELAY_MS ?? "0", 10) || 0)
 const input = createInterface({ input: process.stdin })
 const controlInput = new Socket({ fd: 4, readable: true, writable: false })
 controlInput.unref()
@@ -59,6 +62,77 @@ function assistant(text) {
 
 function liveRecords(records) {
   for (const record of records) live.write(`${JSON.stringify(record)}\n`)
+}
+
+async function stressPrompt(frame) {
+  const promptText = frame.params?.prompt?.[0]?.text ?? ""
+  if (promptCount > 1) {
+    assistant(`after stress:${promptText}`)
+    result(frame.id, { stopReason: "end_turn" })
+    return
+  }
+
+  let seq = 1
+  liveRecords([
+    { v: 1, sessionId: activeSessionId, seq: seq++, kind: "turn-start", turn: 1 },
+    { v: 1, sessionId: activeSessionId, seq: seq++, kind: "activity", turn: 1, step: 1, activity: "responding" },
+  ])
+  for (let index = 0; index < stressToolCalls; index += 1) {
+    const callId = `stress-${index}`
+    liveRecords([
+      {
+        v: 1,
+        sessionId: activeSessionId,
+        seq: seq++,
+        kind: "tool-start",
+        turn: 1,
+        step: index + 2,
+        callId,
+        name: "read_file",
+        arguments: JSON.stringify({ path: `src/stress-${index}.ts` }),
+      },
+      {
+        v: 1,
+        sessionId: activeSessionId,
+        seq: seq++,
+        kind: "tool-end",
+        turn: 1,
+        step: index + 2,
+        callId,
+        isError: false,
+        text: `tool-${index}-ok`,
+      },
+    ])
+  }
+  for (let index = 0; index < stressTextChunks; index += 1) {
+    liveRecords([{
+      v: 1,
+      sessionId: activeSessionId,
+      seq: seq++,
+      kind: "text-delta",
+      turn: 1,
+      step: stressToolCalls + 2,
+      index: 0,
+      text: "x",
+    }])
+    if (stressChunkDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, stressChunkDelayMs))
+  }
+  const finalText = `${"x".repeat(stressTextChunks)}\n\nSTRESS_DONE`
+  liveRecords([
+    {
+      v: 1,
+      sessionId: activeSessionId,
+      seq: seq++,
+      kind: "text-final",
+      turn: 1,
+      step: stressToolCalls + 2,
+      index: 0,
+      text: finalText,
+    },
+    { v: 1, sessionId: activeSessionId, seq: seq++, kind: "turn-end", turn: 1, reason: "end_turn" },
+  ])
+  assistant(finalText)
+  result(frame.id, { stopReason: "end_turn" })
 }
 
 input.on("line", (line) => {
@@ -147,6 +221,11 @@ input.on("line", (line) => {
       assistant(`follow-up:${promptText}`)
       result(frame.id, { stopReason: "end_turn" })
     }
+    return
+  }
+
+  if (scenario === "stress") {
+    void stressPrompt(frame)
     return
   }
 
