@@ -17,14 +17,14 @@ async function exitTui(terminal: ReturnType<typeof spawnTui>): Promise<void> {
   await expect(terminal.waitForExit()).resolves.toMatchObject({ exitCode: 0 })
 }
 
-function acpArgs(persistRoot: string): string[] {
+function acpArgs(persistRoot: string, toolCards = "off"): string[] {
   return [
     "src/main.ts",
     "--mode", "acp",
     "--model", "deepseek-v4-flash",
     "--persist-root", persistRoot,
     "--cwd", process.cwd(),
-    "--tool-cards", "off",
+    "--tool-cards", toolCards,
     "--backend-command-json", JSON.stringify([process.execPath, fixture]),
   ]
 }
@@ -104,6 +104,28 @@ describe("real ACP TUI", () => {
       expect(terminal.screenText()).not.toContain("private follow-up contents")
       await exitTui(terminal)
     })
+  }, 15_000)
+
+  it("renders a JSONL tool result before its truthful turn summary", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dsh-pty-jsonl-"))
+    const terminal = spawnTui(acpArgs(root, "on"), {
+      env: { FAKE_ACP_SCENARIO: "jsonl-tool", DSH_TUI_MOTION: "off", DEEPSEEK_API_KEY: TEST_API_KEY },
+      cols: 80,
+      rows: 24,
+    })
+    try {
+      await terminal.waitForText("ready")
+      const start = terminal.rawLength()
+      terminal.write("inspect\r")
+      await terminal.waitForText("jsonl complete", 8_000, start)
+      await terminal.waitForText("Done · 1 tool", 8_000, start)
+      const output = terminal.raw().slice(start)
+      expect(output.indexOf("jsonl complete")).toBeLessThan(output.lastIndexOf("Done · 1 tool"))
+      await exitTui(terminal)
+    } finally {
+      terminal.kill()
+      await rm(root, { recursive: true, force: true })
+    }
   }, 15_000)
 
   it("keeps partial evidence and marks an unknown outcome after backend exit", async () => {

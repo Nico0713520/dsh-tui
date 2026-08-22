@@ -45,6 +45,30 @@ describe("SessionLogReader", () => {
     }
   })
 
+  it("synchronizes newly appended records without waiting for the next poll", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dsh-log-"))
+    try {
+      const dir = join(root, projectKey("/workspace/demo"), "sync")
+      await mkdir(dir, { recursive: true })
+      const file = join(dir, "session.jsonl")
+      const reader = new SessionLogReader({ pollIntervalMs: 60_000 })
+      const events: SessionLogEvent[] = []
+      reader.watch({ persistRoot: root, cwd: "/workspace/demo", sessionId: "sync", onEvent: (event) => events.push(event) })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      await writeFile(file, JSON.stringify({
+        type: "tool/call",
+        data: { callId: "sync-1", name: "read_file", arguments: "{}" },
+      }) + "\n")
+
+      await reader.synchronize()
+
+      expect(events).toEqual([{ kind: "tool-call", callId: "sync-1", name: "read_file", arguments: "{}" }])
+      reader.stop()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it("correlates tool results and reads isError from the tool-result block", async () => {
     const root = await mkdtemp(join(tmpdir(), "dsh-log-"))
     try {

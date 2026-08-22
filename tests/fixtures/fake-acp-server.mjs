@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline"
-import { closeSync, createWriteStream } from "node:fs"
+import { appendFileSync, closeSync, createWriteStream, mkdirSync } from "node:fs"
 import { Socket } from "node:net"
 
 const scenario = process.env.FAKE_ACP_SCENARIO ?? "normal"
@@ -62,6 +62,34 @@ function assistant(text) {
 
 function liveRecords(records) {
   for (const record of records) live.write(`${JSON.stringify(record)}\n`)
+}
+
+function projectKey(cwd) {
+  let readable = ""
+  let separatorRun = false
+  for (let index = 0; index < cwd.length; index += 1) {
+    const code = cwd.charCodeAt(index)
+    const character = String.fromCharCode(code)
+    if (character === "/" || character === "\\" || character === ":") {
+      if (!separatorRun) readable += "-"
+      separatorRun = true
+    } else if (code !== 126 && /^[A-Za-z0-9._-]$/.test(character)) {
+      readable += character
+      separatorRun = false
+    } else {
+      readable += `~${code.toString(16).toUpperCase().padStart(4, "0")}`
+      separatorRun = false
+    }
+  }
+  return `--${(readable.replace(/^-+/, "") || "root").slice(0, 251)}--`
+}
+
+function appendSessionRecords(records) {
+  const root = process.env.DSH_PERSIST_ROOT
+  if (!root || !activeSessionId) return
+  const directory = `${root}/${projectKey(process.cwd())}/${activeSessionId}`
+  mkdirSync(directory, { recursive: true })
+  appendFileSync(`${directory}/session.jsonl`, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`)
 }
 
 async function stressPrompt(frame) {
@@ -232,6 +260,16 @@ input.on("line", (line) => {
   if (scenario === "stderr-secret") {
     process.stderr.write("Authorization: Bearer sk-test-only-1234567890abcdef\n")
     assistant("safe")
+    result(frame.id, { stopReason: "end_turn" })
+    return
+  }
+
+  if (scenario === "jsonl-tool") {
+    appendSessionRecords([
+      { type: "tool/call", data: { callId: "jsonl-1", name: "read_file", arguments: { path: "README.md" } } },
+      { type: "tool/result", data: { message: { source: { callId: "jsonl-1" }, content: [{ type: "tool-result", isError: false, content: [{ type: "text", text: "jsonl complete" }] }] } } },
+    ])
+    assistant("observed")
     result(frame.id, { stopReason: "end_turn" })
     return
   }

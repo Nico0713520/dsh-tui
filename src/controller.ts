@@ -91,6 +91,7 @@ export interface BackendPort {
 export interface SessionLogPort {
   watch(options: SessionLogWatchOptions): void
   stop(): void
+  synchronize(): Promise<void>
   lookupCall(callId: string): { name: string; arguments: string } | undefined
   listHistory(persistRoot: string, cwd: string): Promise<SessionInfo[]>
   loadHistory(persistRoot: string, cwd: string, sessionId: string): Promise<HistoryEntry[]>
@@ -212,6 +213,7 @@ export class AppController {
       await this.backend.synchronizeLiveEvents?.()
       if (this.isClosing() || this.hasFailed()) return
       if (this.stateValue.phase === "cancelling") {
+        await this.synchronizeObservability()
         this.setState({ partialAssistantText: "", interruption: "cancelled" })
         this.reportPerf()
         this.setState({ phase: "ready", activity: { kind: "idle" }, backendMessage: "interrupted" })
@@ -221,6 +223,7 @@ export class AppController {
       }
       this.assistantStream.preparePrompt()
       const result = await this.backend.prompt(value)
+      await this.synchronizeObservability()
       if (this.isClosing() || this.stateValue.phase === "failed") return
       this.turnPerf.mark("settled")
       if (result.stopReason === "cancelled") {
@@ -238,6 +241,7 @@ export class AppController {
       void this.drainQueuedPrompt()
     } catch (error) {
       if (this.isClosing() || this.stateValue.phase === "failed") return
+      await this.synchronizeObservability()
       this.turnPerf.mark("settled")
       this.finishAssistant("outcome-unknown")
       this.setState({ activity: { kind: "idle" } })
@@ -533,6 +537,19 @@ export class AppController {
       failedToolCount: this.turnFailedToolCount,
     }
     this.setState({ transcript: [...this.stateValue.transcript, summary] })
+  }
+
+  private async synchronizeObservability(): Promise<void> {
+    try {
+      await this.backend.synchronizeLiveEvents?.()
+    } catch (error) {
+      this.addDiagnostic(`live event synchronization failed: ${String(error)}`)
+    }
+    try {
+      await this.logs.synchronize()
+    } catch (error) {
+      this.addDiagnostic(`session log synchronization failed: ${String(error)}`)
+    }
   }
 
   private resetLiveMetadata(): void {

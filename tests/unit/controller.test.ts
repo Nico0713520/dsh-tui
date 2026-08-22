@@ -34,6 +34,7 @@ function createHarness(configOverride: Partial<AppConfig> = {}, now: () => numbe
   let rejectSession: ((error: Error) => void) | undefined
   let liveSyncGate: Promise<void> | null = null
   let releaseLiveSync: (() => void) | undefined
+  let synchronizeLogsImpl: () => Promise<void> = async () => {}
   const renders: AppState[] = []
   const promptCalls: string[] = []
   const cleanupOrder: string[] = []
@@ -70,6 +71,7 @@ function createHarness(configOverride: Partial<AppConfig> = {}, now: () => numbe
     lookupCall(callId) { return lookupCallImpl(callId) },
     async listHistory() { return listHistoryImpl() },
     async loadHistory() { return loadHistoryImpl() },
+    async synchronize() { await synchronizeLogsImpl() },
     emit(event) { logs.watched?.onEvent(event) },
   }
   const view: ControllerView & { prepareShutdown(): void; dismissOverlays(): void } = {
@@ -107,6 +109,9 @@ function createHarness(configOverride: Partial<AppConfig> = {}, now: () => numbe
     },
     setLookupCall(impl: (callId: string) => { name: string; arguments: string } | undefined) {
       lookupCallImpl = impl
+    },
+    setLogSynchronize(impl: () => Promise<void>) {
+      synchronizeLogsImpl = impl
     },
     deferPrompt() {
       promptImpl = async () => new Promise((resolve) => {
@@ -513,6 +518,58 @@ describe("AppController", () => {
       durationMs: expect.any(Number),
     })
     expect(harness.controller.state.usage).toEqual({ inputTokens: 7, outputTokens: 2, cacheReadTokens: 0 })
+  })
+
+  it("synchronizes a JSONL tool result before finalizing the turn summary", async () => {
+    const harness = createHarness()
+    harness.deferPrompt()
+    harness.setLogSynchronize(async () => {
+      harness.logs.emit({ kind: "tool-call", callId: "late-1", name: "read_file", arguments: "{}" })
+      harness.logs.emit({ kind: "tool-result", callId: "late-1", name: "read_file", text: "done", isError: false })
+    })
+    await harness.controller.start()
+    harness.controller.onSessionChanged("session-1")
+    const prompt = harness.controller.submit("inspect")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    harness.finishPrompt()
+    await prompt
+
+    expect(harness.controller.state.transcript.at(-1)).toEqual({
+      kind: "turn-summary",
+      status: "done",
+      durationMs: expect.any(Number),
+      toolCount: 1,
+      failedToolCount: 0,
+    })
+  })
+
+  it("does not start a queued follow-up until observability and the first summary settle", async () => {
+    let now = 1_000
+    const harness = createHarness({}, () => now)
+    harness.deferPrompt()
+    let releaseLogs!: () => void
+    const logsSettled = new Promise<void>((resolve) => { releaseLogs = resolve })
+    harness.setLogSynchronize(() => logsSettled)
+    await harness.controller.start()
+    const first = harness.controller.submit("one")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await harness.controller.submit("two")
+
+    harness.finishPrompt()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(harness.promptCalls).toEqual(["one"])
+
+    now = 1_500
+    releaseLogs()
+    await first
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(harness.promptCalls).toEqual(["one", "two"])
+    const transcript = harness.controller.state.transcript
+    const summaryIndex = transcript.findIndex((item) => item.kind === "turn-summary")
+    const secondUserIndex = transcript.findIndex((item, index) => index > 0 && item.kind === "user" && item.text === "two")
+    expect(summaryIndex).toBeGreaterThanOrEqual(0)
+    expect(secondUserIndex).toBeGreaterThan(summaryIndex)
   })
 
   it("accepts first-arriving usage after ACP settles without prior live records", async () => {

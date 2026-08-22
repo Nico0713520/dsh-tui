@@ -130,6 +130,7 @@ export class SessionLogReader {
   private callNames = new Map<string, { name: string; arguments: string }>()
   private lastMetadataStamp: string | null = null
   private options: SessionLogWatchOptions | null = null
+  private pumping: Promise<void> = Promise.resolve()
 
   constructor(options: { pollIntervalMs?: number; readChunkSize?: number } = {}) {
     this.pollIntervalMs = options.pollIntervalMs ?? 250
@@ -177,16 +178,33 @@ export class SessionLogReader {
     this.lastMetadataStamp = null
   }
 
+  /** Immediately consume records currently visible on disk without creating another poll timer. */
+  async synchronize(): Promise<void> {
+    const generation = this.generation
+    if (!this.options) return
+    try {
+      await this.enqueuePump(generation)
+    } catch (error) {
+      if (generation === this.generation) this.options?.onDiagnostic?.(`session log read failed: ${String(error)}`)
+    }
+  }
+
   private async tick(generation: number): Promise<void> {
     if (generation !== this.generation || !this.options) return
     try {
-      await this.pump(generation)
+      await this.enqueuePump(generation)
     } catch (error) {
       if (generation === this.generation) this.options.onDiagnostic?.(`session log read failed: ${String(error)}`)
     }
     if (generation === this.generation && this.options) {
       this.timer = setTimeout(() => { void this.tick(generation) }, this.pollIntervalMs)
     }
+  }
+
+  private enqueuePump(generation: number): Promise<void> {
+    const next = this.pumping.then(() => this.pump(generation))
+    this.pumping = next.catch(() => undefined)
+    return next
   }
 
   private async pump(generation: number): Promise<void> {
