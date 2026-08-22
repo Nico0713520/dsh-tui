@@ -1,6 +1,6 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui"
 import type { AppState } from "../controller.ts"
-import type { RunMode } from "../config.ts"
+import type { ReasoningMode, RunMode } from "../config.ts"
 import { singleLine } from "../text.ts"
 import type { UiTheme } from "./theme.ts"
 
@@ -10,6 +10,7 @@ export interface FooterOptions {
   cwd?: string
   notice?: string
   elapsedSeconds?: number
+  reasoningMode: ReasoningMode
 }
 
 function activityLabel(state: AppState): string {
@@ -28,11 +29,6 @@ function activityLabel(state: AppState): string {
 function padToCellWidth(text: string, width: number): string {
   const clipped = singleLine(text, width)
   return `${clipped}${" ".repeat(Math.max(0, width - visibleWidth(clipped)))}`
-}
-
-function workspaceTail(cwd: string): string {
-  const normalized = cwd.replace(/[\\/]+$/, "")
-  return singleLine(normalized.split(/[\\/]/).at(-1) || normalized, 24)
 }
 
 export function footerText(
@@ -54,12 +50,12 @@ export function footerText(
   const notice = options.notice || state.backendMessage || state.interruption || ""
 
   if (notice) {
-    const labelWidth = Math.max(4, Math.min(10, width - 16))
+    const labelWidth = Math.max(4, Math.min(10, width - 12))
     const stableLabel = padToCellWidth(label, labelWidth)
     const fixed = visibleWidth(` ${stableLabel} ·  · `)
     const budget = Math.max(2, width - fixed)
-    const noticeWidth = Math.max(1, Math.min(visibleWidth(notice), Math.ceil(budget * 0.68)))
-    const backendWidth = Math.max(1, budget - noticeWidth)
+    const backendWidth = Math.max(1, Math.min(visibleWidth(backendName), Math.floor(budget * 0.34)))
+    const noticeWidth = Math.max(1, budget - backendWidth)
     return truncateToWidth(
       ` ${colorPhase(stableLabel)} · ${styleBackend(singleLine(backendName, backendWidth))} · ${theme.fg("muted", singleLine(notice, noticeWidth))}`,
       width,
@@ -67,22 +63,21 @@ export function footerText(
     )
   }
 
-  const labelWidth = Math.max(4, Math.min(16, width - 10))
+  const showReasoning = width >= 28
+  const reasoning = showReasoning ? ` · ${theme.fg("accent", options.reasoningMode)}` : ""
+  const labelWidth = width >= 48 ? 16 : width >= 28 ? 10 : Math.max(4, Math.min(8, width - 8))
   const stableLabel = padToCellWidth(label, labelWidth)
   const fixedPrefix = ` ${colorPhase(stableLabel)} · `
-  const minimumBackendWidth = Math.max(1, width - visibleWidth(fixedPrefix))
-  let text = `${fixedPrefix}${styleBackend(singleLine(backendName, minimumBackendWidth))}`
+  const backendWidth = Math.max(1, width - visibleWidth(fixedPrefix) - visibleWidth(reasoning))
+  let text = `${fixedPrefix}${styleBackend(singleLine(backendName, backendWidth))}${reasoning}`
 
   const segments: string[] = []
-  if (options.cwd) segments.push(theme.fg("muted", workspaceTail(options.cwd)))
   if (options.elapsedSeconds !== undefined && (state.phase === "working" || state.phase === "cancelling")) {
     segments.push(theme.fg("muted", `${Math.max(0, options.elapsedSeconds)}s`))
   }
-  if (state.sessionId) segments.push(theme.fg("muted", singleLine(state.sessionId, 9)))
-  if (state.usage.inputTokens || state.usage.outputTokens || state.usage.cacheReadTokens) {
+  if (width >= 96 && (state.usage.inputTokens || state.usage.outputTokens || state.usage.cacheReadTokens)) {
     segments.push(theme.fg("muted", `${state.usage.inputTokens ?? 0}in/${state.usage.outputTokens ?? 0}out/${state.usage.cacheReadTokens ?? 0}cached`))
   }
-  if (state.costUsd !== null) segments.push(theme.fg("muted", `$${state.costUsd.toFixed(6)}`))
 
   for (const segment of segments) {
     const candidate = `${text} · ${segment}`

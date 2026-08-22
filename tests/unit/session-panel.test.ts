@@ -25,6 +25,7 @@ describe("Session Panel", () => {
       model: "deepseek-v4-flash",
       cwd: "/workspace/demo",
       mode: "acp",
+      reasoningMode: "deep",
       motion: "full",
       theme: createUiTheme("terminal"),
       columns: 64,
@@ -34,6 +35,7 @@ describe("Session Panel", () => {
     expect(text).toContain("/workspace/demo")
     expect(text).toContain("session-1234")
     expect(text).toContain("workspace-write")
+    expect(text).toContain("deep")
     expect(text).not.toMatch(/MCP|Skills|Git|authenticated/i)
   })
 
@@ -43,6 +45,7 @@ describe("Session Panel", () => {
       model: "deepseek-v4-flash",
       cwd: "/workspace/非常长的项目目录",
       mode: "acp",
+      reasoningMode: "quick",
       motion: "reduced",
       theme: createUiTheme("deepseek"),
       columns: 32,
@@ -61,6 +64,7 @@ describe("Session Panel", () => {
       model: "deepseek-v4-flash",
       cwd: "/workspace/demo",
       mode: "acp",
+      reasoningMode: "quick",
       motion: "off",
       theme: createUiTheme("terminal"),
       columns: 80,

@@ -90,6 +90,7 @@ export async function runApp(config: AppConfig): Promise<number> {
     model: config.model,
     cwd: config.cwd,
     motion: config.motion,
+    reasoningMode: config.reasoningMode,
     theme: config.theme,
     brandAssetPath: resolveBrandAsset(),
   })

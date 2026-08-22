@@ -1,6 +1,6 @@
 import { truncateToWidth } from "@earendil-works/pi-tui"
 import type { AppState } from "../controller.ts"
-import type { MotionPreference, RunMode } from "../config.ts"
+import type { MotionPreference, ReasoningMode, RunMode } from "../config.ts"
 import { sanitizeTerminalText, singleLine } from "../text.ts"
 import type { UiTheme } from "./theme.ts"
 
@@ -9,6 +9,7 @@ export interface SessionPanelOptions {
   model: string
   cwd: string
   mode: RunMode
+  reasoningMode: ReasoningMode
   motion: MotionPreference
   theme: UiTheme
   columns: number
@@ -34,6 +35,7 @@ export function sessionPanelText(options: SessionPanelOptions): string {
   const usage = `${state.usage.inputTokens ?? 0} in · ${state.usage.outputTokens ?? 0} out · ${state.usage.cacheReadTokens ?? 0} cached`
   const rows = [
     row("model", options.mode === "echo" ? "echo" : options.model),
+    row("effort", `${options.reasoningMode} · ${options.reasoningMode === "deep" ? "max" : "low"} reasoning`),
     row("workspace", options.cwd),
     row("session", state.sessionId ?? "creating…"),
     row("activity", activityText(state)),

@@ -77,7 +77,7 @@ describe("real Echo TUI", () => {
       await terminal.waitForText("Ctrl+C again to exit", 2_000, noticeStart)
       const clearStart = terminal.rawLength()
       await new Promise((resolve) => setTimeout(resolve, 1_650))
-      await terminal.waitForText("echo-1", 2_000, clearStart)
+      await terminal.waitForText("echo · quick", 2_000, clearStart)
       expect(terminal.raw().slice(clearStart)).not.toContain("Ctrl+C again to exit")
 
       terminal.write("\u0003")
@@ -139,7 +139,7 @@ describe("real Echo TUI", () => {
       env: { TERM_PROGRAM: "iTerm.app", ITERM_SESSION_ID: "test-session", TMUX: undefined },
     })
     try {
-      await terminal.waitForText("DeepSeek Harness")
+      await terminal.waitForText("dsh-tui  v0.2.0")
       await terminal.waitForRaw("\x1b]1337;File=")
       expect(terminal.raw()).not.toContain("image/png")
       terminal.write("\u0003")
@@ -158,7 +158,7 @@ describe("real Echo TUI", () => {
       env: { NO_COLOR: undefined },
     })
     try {
-      await light.waitForText("DeepSeek Harness")
+      await light.waitForText("dsh-tui  v0.2.0")
       expect(light.raw()).toContain("\x1b[48;2;247;249;255m")
       light.write("\u0003")
       await new Promise((resolve) => setTimeout(resolve, 50))
@@ -175,7 +175,7 @@ describe("real Echo TUI", () => {
       env: { NO_COLOR: "1" },
     })
     try {
-      await noColor.waitForText("DeepSeek Harness")
+      await noColor.waitForText("dsh-tui  v0.2.0")
       expect(noColor.screenText()).toContain("▟██████▙")
       expect(noColor.screenText()).not.toMatch(/[\u2800-\u28ff]/u)
       expect(noColor.raw()).not.toContain("\x1b[38;2;")
@@ -192,7 +192,7 @@ describe("real Echo TUI", () => {
   it("lets the complete welcome naturally scroll away in a long conversation", async () => {
     const terminal = spawnTui(["src/main.ts", "--echo", "--motion", "off"], { cols: 80, rows: 12 })
     try {
-      await terminal.waitForText("DeepSeek Harness")
+      await terminal.waitForText("dsh-tui  v0.2.0")
       for (const prompt of ["one", "two", "three", "four"]) {
         const start = terminal.rawLength()
         terminal.write(`${prompt}\r`)

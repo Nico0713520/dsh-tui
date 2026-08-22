@@ -43,7 +43,7 @@ async function withAcp(scenario: string, run: (terminal: ReturnType<typeof spawn
     rows: 24,
   })
   try {
-    await terminal.waitForText("fake-001")
+    await terminal.waitForText("ready")
     await run(terminal, root)
   } finally {
     terminal.kill()
@@ -60,7 +60,7 @@ describe("real ACP TUI", () => {
       rows: 24,
     })
     try {
-      await terminal.waitForText("DeepSeek Harness")
+      await terminal.waitForText("dsh-tui  v0.2.0")
       await terminal.waitForText("starting")
       terminal.write("first\r")
       await terminal.waitForText("queued")
@@ -185,7 +185,7 @@ describe("real ACP TUI", () => {
     expect((await listHistory(root, process.cwd())).map((item) => item.id)).toEqual(["hist-1234"])
     const terminal = spawnTui(acpArgs(root), { env: { FAKE_ACP_SCENARIO: "normal", DEEPSEEK_API_KEY: TEST_API_KEY }, cols: 100, rows: 30 })
     try {
-      await terminal.waitForText("fake-001")
+      await terminal.waitForText("ready")
       terminal.write("\u0012")
       await terminal.waitForText("Recorded session")
       terminal.write("\u001b[B")
@@ -198,8 +198,12 @@ describe("real ACP TUI", () => {
       terminal.write("\u0012")
       await terminal.waitForText("+ New session", 8_000, newSessionStart)
       terminal.write("\r")
+      await pause(200)
+      terminal.write("/status\r")
       await terminal.waitForText("fake-002", 8_000, newSessionStart)
-      await terminal.waitForText("DeepSeek Harness", 8_000, newSessionStart)
+      const overlayCloseStart = terminal.rawLength()
+      terminal.write("\u001b")
+      await terminal.waitForText("dsh-tui  v0.2.0", 8_000, overlayCloseStart)
       await exitTui(terminal)
     } finally {
       terminal.kill()

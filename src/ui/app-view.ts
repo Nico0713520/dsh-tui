@@ -16,7 +16,7 @@ import {
 import type { ApprovalRequest, AppState, ControllerView, HistoryChoice, TranscriptItem } from "../controller.ts"
 import type { PermissionDecision } from "../backend/acp-client.ts"
 import type { SessionInfo } from "../backend/session-log.ts"
-import type { MotionPreference, RunMode } from "../config.ts"
+import type { MotionPreference, ReasoningMode, RunMode } from "../config.ts"
 import type { ThemePreference } from "../preferences.ts"
 import { sanitizeTerminalText, singleLine } from "../text.ts"
 import { createUiTheme, type UiTheme } from "./theme.ts"
@@ -134,6 +134,7 @@ export class AppView implements ControllerView {
   private readonly model: string
   private readonly cwd: string
   private readonly motion: MotionPreference
+  private readonly reasoningMode: ReasoningMode
   private readonly tty: boolean
   private readonly theme: UiTheme
   private readonly pulseClock: VisualClock
@@ -149,6 +150,7 @@ export class AppView implements ControllerView {
     model: string
     cwd: string
     motion: MotionPreference
+    reasoningMode: ReasoningMode
     theme?: ThemePreference
     color?: boolean
     tty?: boolean
@@ -160,6 +162,7 @@ export class AppView implements ControllerView {
     this.model = options.model
     this.cwd = options.cwd
     this.motion = options.motion
+    this.reasoningMode = options.reasoningMode
     this.tty = options.tty ?? process.stdout.isTTY === true
     this.theme = createUiTheme(options.theme ?? "terminal", {
       color: options.color ?? !("NO_COLOR" in process.env),
@@ -455,6 +458,7 @@ export class AppView implements ControllerView {
       cwd: this.cwd,
       notice: this.notice,
       elapsedSeconds: this.elapsedSeconds,
+      reasoningMode: this.reasoningMode,
     }, this.terminal.columns, this.theme))
   }
 
@@ -480,6 +484,7 @@ export class AppView implements ControllerView {
         model: this.model,
         cwd: this.cwd,
         mode: this.mode,
+        reasoningMode: this.reasoningMode,
         motion: this.motion,
         theme: this.theme,
         columns,

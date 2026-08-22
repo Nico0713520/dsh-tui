@@ -4,7 +4,9 @@ import type { Component } from "@earendil-works/pi-tui"
 import type { AppState } from "../../src/controller.ts"
 import { editorSubmitDisabled, headerText, statusText, toolResultText } from "../../src/ui/app-view.ts"
 import { createStreamingMarkdownView } from "../../src/ui/streaming-markdown.ts"
-import { markdownTheme } from "../../src/ui/theme.ts"
+import { createUiTheme } from "../../src/ui/theme.ts"
+
+const markdownTheme = createUiTheme("terminal").markdown
 
 const state: AppState = {
   phase: "ready",
@@ -116,14 +118,14 @@ describe("TUI presentation", () => {
   })
 
   it("renders starting instead of falsely reporting ready", () => {
-    const text = statusText({ ...state, phase: "starting", sessionId: null }, { mode: "acp", model: "deepseek-v4-flash" }, 48)
+    const text = statusText({ ...state, phase: "starting", sessionId: null }, { mode: "acp", model: "deepseek-v4-flash", reasoningMode: "quick" }, 48)
     expect(text).toContain("starting")
     expect(text).not.toContain("ready")
     expect(visibleWidth(text)).toBeLessThanOrEqual(48)
   })
 
   it("keeps a transient notice visible in a narrow status bar", () => {
-    const text = statusText(state, { mode: "echo", model: "deepseek-v4-flash", notice: "Ctrl+C again to exit" }, 48)
+    const text = statusText(state, { mode: "echo", model: "deepseek-v4-flash", reasoningMode: "quick", notice: "Ctrl+C again to exit" }, 48)
     expect(text).toContain("Ctrl+C again to exit")
     expect(visibleWidth(text)).toBeLessThanOrEqual(48)
   })
@@ -131,7 +133,7 @@ describe("TUI presentation", () => {
   it("keeps phase, model, and interruption in the compact priority status", () => {
     const text = stripTerminalSequences(statusText(
       { ...state, interruption: "outcome-unknown" },
-      { mode: "acp", model: "deepseek-v4-flash" },
+      { mode: "acp", model: "deepseek-v4-flash", reasoningMode: "quick" },
       48,
     ))
 
@@ -150,7 +152,7 @@ describe("TUI presentation", () => {
     ]
     const statuses = activities.map((activity) => stripTerminalSequences(statusText(
       { ...state, phase: "working", activity },
-      { mode: "acp", model: "deepseek-v4-flash", elapsedSeconds: 3 },
+      { mode: "acp", model: "deepseek-v4-flash", reasoningMode: "quick", elapsedSeconds: 3 },
       80,
     )))
 
@@ -165,7 +167,7 @@ describe("TUI presentation", () => {
   it("shows queued follow-up without exposing its content", () => {
     const text = stripTerminalSequences(statusText(
       { ...state, phase: "working", queuedPrompt: "private follow-up contents" },
-      { mode: "acp", model: "deepseek-v4-flash" },
+      { mode: "acp", model: "deepseek-v4-flash", reasoningMode: "quick" },
       80,
     ))
     expect(text).toContain("queued follow-up")
@@ -175,7 +177,7 @@ describe("TUI presentation", () => {
   it("keeps phase and model ahead of low-priority details on a narrow terminal", () => {
     const text = stripTerminalSequences(statusText(
       { ...state, phase: "working", activity: { kind: "thinking" } },
-      { mode: "acp", model: "deepseek-v4-flash", elapsedSeconds: 12 },
+      { mode: "acp", model: "deepseek-v4-flash", reasoningMode: "quick", elapsedSeconds: 12 },
       32,
     ))
 
@@ -186,7 +188,7 @@ describe("TUI presentation", () => {
 
     const responding = stripTerminalSequences(statusText(
       { ...state, phase: "working", activity: { kind: "responding" } },
-      { mode: "acp", model: "deepseek-v4-flash" },
+      { mode: "acp", model: "deepseek-v4-flash", reasoningMode: "quick" },
       32,
     ))
     expect(responding).toContain("responding")
@@ -194,7 +196,7 @@ describe("TUI presentation", () => {
 
     const cjkTool = stripTerminalSequences(statusText(
       { ...state, phase: "working", activity: { kind: "tool", name: "读取文件" } },
-      { mode: "acp", model: "deepseek-v4-flash" },
+      { mode: "acp", model: "deepseek-v4-flash", reasoningMode: "quick" },
       32,
     ))
     expect(visibleWidth(cjkTool.slice(0, cjkTool.indexOf("deepseek"))))
@@ -202,7 +204,7 @@ describe("TUI presentation", () => {
 
     const tighter = stripTerminalSequences(statusText(
       { ...state, phase: "working", activity: { kind: "thinking" } },
-      { mode: "acp", model: "deepseek-v4-flash" },
+      { mode: "acp", model: "deepseek-v4-flash", reasoningMode: "quick" },
       20,
     ))
     expect(tighter).toContain("thinking")

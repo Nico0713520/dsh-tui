@@ -41,7 +41,7 @@ const DEEPSEEK_SURFACES: Record<SurfaceRole, string> = {
   canvas: "#F7F9FF",
   user: "#EEF3FF",
   toolPending: "#F1F4FC",
-  toolSuccess: "#EAF7F0",
+  toolSuccess: "#F1F4FC",
   toolError: "#FDEEF0",
   overlay: "#FFFFFF",
 }
@@ -98,8 +98,8 @@ export function createUiTheme(
     heading: (text) => strong(fg("brand", text)),
     link: (text) => underline(fg("accent", text)),
     linkUrl: (text) => fg("muted", text),
-    code: (text) => fg("warning", text),
-    codeBlock: (text) => fg("success", text),
+    code: (text) => fg("accent", text),
+    codeBlock: (text) => fg("text", text),
     codeBlockBorder: (text) => fg("border", text),
     quote: (text) => italic(fg("muted", text)),
     quoteBorder: (text) => fg("border", text),
@@ -138,27 +138,6 @@ export function createUiTheme(
     },
   }
 }
-
-const terminalTheme = createUiTheme("terminal", { color: true })
-
-// Transitional compatibility exports for modules converted in later visual slices.
-export const c = {
-  dim: (text: string) => terminalTheme.fg("muted", text),
-  cyan: (text: string) => terminalTheme.fg("brand", text),
-  blue: (text: string) => terminalTheme.fg("brand", text),
-  green: (text: string) => terminalTheme.fg("success", text),
-  red: (text: string) => terminalTheme.fg("error", text),
-  yellow: (text: string) => terminalTheme.fg("warning", text),
-  bold: (text: string) => terminalTheme.strong(text),
-}
-
-export const selectTheme = terminalTheme.select
-export const markdownTheme = terminalTheme.markdown
-export const MARK_ASSISTANT = terminalTheme.fg("brand", "❯") + " "
-export const MARK_USER = terminalTheme.fg("brand", "›") + " "
-export const MARK_TOOL = terminalTheme.fg("muted", "⚙") + " "
-export const MARK_TOOL_ERR = terminalTheme.fg("error", "⚙✗") + " "
-export const STATUS_PREFIX = terminalTheme.fg("muted", "")
 
 export function toolSummary(name: string, args: string, width = 80): string {
   let detail = ""

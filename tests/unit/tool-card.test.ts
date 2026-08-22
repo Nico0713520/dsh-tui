@@ -46,8 +46,9 @@ describe("tool cards", () => {
 
   it("uses semantic surfaces in DeepSeek Light", () => {
     const light = createUiTheme("deepseek")
-    expect(toolCardText(result, { columns: 48, expanded: false, frame: 0, theme: light }))
-      .toContain("\x1b[48;2;234;247;240m")
+    const rendered = toolCardText(result, { columns: 48, expanded: false, frame: 0, theme: light })
+    expect(rendered).toContain("\x1b[48;2;241;244;252m")
+    expect(rendered).not.toContain("\x1b[48;2;234;247;240m")
   })
 
   it("animates only pending cards and reuses completed render output", () => {

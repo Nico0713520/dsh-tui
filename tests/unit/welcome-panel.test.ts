@@ -22,8 +22,8 @@ describe("welcome presentation", () => {
     [120, 11],
     [96, 11],
     [80, 10],
-    [60, 10],
-    [48, 10],
+    [60, 11],
+    [48, 11],
     [32, 1],
   ])("fits the %i-column tier within its row budget", (columns, maxRows) => {
     const lines = new WelcomeTranscriptComponent({
@@ -45,7 +45,8 @@ describe("welcome presentation", () => {
       assetPath,
     }).render(120).join("\n"))
 
-    expect(text).toContain("DeepSeek Harness")
+    expect(text).toContain("dsh-tui  v0.2.0")
+    expect(text).toContain("Community client for DeepSeek Harness")
     expect(text).toContain("Welcome back!")
     expect(text).toContain("Tips for getting started")
     expect(text).toContain("Quick actions")

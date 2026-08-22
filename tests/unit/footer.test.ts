@@ -23,18 +23,20 @@ const options = {
   model: "deepseek-v4-flash",
   cwd: "/Users/example/workspace/dsh-tui",
   elapsedSeconds: 12,
+  reasoningMode: "quick" as const,
 }
 
 describe("adaptive footer", () => {
-  it("shows all observable details when space is available", () => {
+  it("keeps the common footer light while retaining useful live facts", () => {
     const active = { ...state, phase: "working", activity: { kind: "thinking" } } satisfies AppState
     const text = stripTerminalSequences(footerText(active, options, 160, createUiTheme("terminal")))
     expect(text).toContain("deepseek-v4-flash")
-    expect(text).toContain("dsh-tui")
+    expect(text).toContain("quick")
     expect(text).toContain("12s")
-    expect(text).toContain("session-")
     expect(text).toContain("cached")
-    expect(text).toContain("$")
+    expect(text).not.toContain("session-")
+    expect(text).not.toContain("dsh-tui")
+    expect(text).not.toContain("$")
   })
 
   it("omits meaningless elapsed time while idle", () => {
@@ -42,7 +44,7 @@ describe("adaptive footer", () => {
     expect(text).not.toContain("0s")
   })
 
-  it("removes cost, token, session, elapsed, then workspace as width shrinks", () => {
+  it("keeps phase, model, and reasoning mode as width shrinks", () => {
     const theme = createUiTheme("terminal")
     const rows = [160, 100, 80, 60, 32].map((columns) => ({
       columns,
@@ -52,6 +54,7 @@ describe("adaptive footer", () => {
     expect(rows.every(({ columns, text }) => visibleWidth(text) <= columns)).toBe(true)
     expect(rows.at(-1)?.text).toContain("ready")
     expect(rows.at(-1)?.text).toContain("deep")
+    expect(rows.at(-1)?.text).toContain("quick")
     expect(rows.at(-1)?.text).not.toContain("cached")
   })
 

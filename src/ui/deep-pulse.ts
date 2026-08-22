@@ -1,5 +1,7 @@
-import { c } from "./theme.ts"
+import { createUiTheme } from "./theme.ts"
 import type { MotionPreference } from "../config.ts"
+
+const pulseTheme = createUiTheme("terminal")
 
 export interface DeepPulseFrameOptions {
   columns: number
@@ -21,15 +23,15 @@ export function deepPulseFrame(options: DeepPulseFrameOptions): string {
   const word = "dsh-tui"
   if (!options.tty || options.motion === "off") return `${prefix}${word}`
   if (options.motion === "reduced") {
-    return `${prefix}${options.completion ? c.bold(c.cyan(word)) : word}`
+    return `${prefix}${options.completion ? pulseTheme.strong(pulseTheme.fg("brand", word)) : word}`
   }
-  if (options.completion) return `${prefix}${c.bold(c.cyan(word))}`
+  if (options.completion) return `${prefix}${pulseTheme.strong(pulseTheme.fg("brand", word))}`
   if (options.frame >= 10) return `${prefix}${word}`
   const highlight = options.frame % word.length
   const animated = Array.from(word).map((character, index) => {
-    if (index === highlight) return c.bold(c.cyan(character))
-    if (Math.abs(index - highlight) === 1) return c.blue(character)
-    return c.dim(character)
+    if (index === highlight) return pulseTheme.strong(pulseTheme.fg("brand", character))
+    if (Math.abs(index - highlight) === 1) return pulseTheme.fg("brand", character)
+    return pulseTheme.fg("muted", character)
   }).join("")
   return `${prefix}${animated}`
 }

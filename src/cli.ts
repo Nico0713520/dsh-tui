@@ -9,8 +9,9 @@ import {
 } from "./credentials.ts"
 import { readSecretFromTty } from "./secret-input.ts"
 import { loadUiPreferences, saveThemePreference, type ThemePreference } from "./preferences.ts"
+import { VERSION } from "./version.ts"
 
-export const VERSION = "0.1.0"
+export { VERSION }
 
 export const HELP = `dsh-tui ${VERSION}
 

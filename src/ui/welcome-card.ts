@@ -1,4 +1,3 @@
-import { basename } from "node:path"
 import {
   truncateToWidth,
   visibleWidth,
@@ -6,6 +5,7 @@ import {
 } from "@earendil-works/pi-tui"
 import type { AppPhase } from "../controller.ts"
 import { sanitizeTerminalText, singleLine } from "../text.ts"
+import { VERSION } from "../version.ts"
 import type { UiTheme } from "./theme.ts"
 
 export interface WelcomeCardOptions {
@@ -41,8 +41,8 @@ function phaseText(phase: AppPhase, theme: UiTheme): string {
 
 function topBorder(width: number, theme: UiTheme, compact = false): string {
   const title = compact
-    ? theme.strong(theme.fg("brand", "DeepSeek Harness"))
-    : `${theme.strong(theme.fg("brand", "DeepSeek Harness"))}  ${theme.fg("muted", "v0.1.0")}`
+    ? theme.strong(theme.fg("brand", "dsh-tui"))
+    : `${theme.strong(theme.fg("brand", "dsh-tui"))}  ${theme.fg("muted", `v${VERSION}`)}`
   const prefix = `${theme.fg("border", "╭─")} ${title} `
   const fill = "─".repeat(Math.max(0, width - visibleWidth(prefix) - 1))
   return `${prefix}${theme.fg("border", `${fill}╮`)}`
@@ -62,10 +62,6 @@ function safeModel(model: string): string {
   return singleLine(sanitizeTerminalText(model), 32)
 }
 
-function safeWorkspace(cwd: string): string {
-  return singleLine(sanitizeTerminalText(basename(cwd) || cwd), 30)
-}
-
 function logoRows(options: WelcomeCardOptions, width: number): readonly string[] {
   return options.logo?.render(Math.max(1, width)) ?? []
 }
@@ -78,7 +74,7 @@ function rightContent(
 ): string {
   if (row === 0) return theme.strong(theme.fg("brand", "Tips for getting started"))
   if (row === 1) return theme.fg("text", "Enter a task or ask about this workspace.")
-  if (row === 2) return theme.fg("muted", "Use /status for model, session, and safety details.")
+  if (row === 2) return theme.fg("muted", "Community client for DeepSeek Harness")
   if (row === dividerRow + 1) return theme.strong(theme.fg("brand", "Quick actions"))
   if (row === dividerRow + 2) return `${theme.fg("accent", "Enter")} send  ${theme.fg("muted", "·")}  ${theme.fg("accent", "Esc")} stop`
   if (row === dividerRow + 3 && rightWidth >= 30) {
@@ -96,7 +92,6 @@ function renderSplitCard(options: WelcomeCardOptions, width: number): string[] {
     options.theme.strong(options.theme.fg("text", "Welcome back!")),
     ...renderedLogo,
     `${options.theme.fg("brand", safeModel(options.model))} ${options.theme.fg("muted", "·")} ${phaseText(options.phase, options.theme)}`,
-    options.theme.fg("muted", safeWorkspace(options.cwd)),
   ]
   const height = Math.max(8, leftRows.length)
   const dividerRow = Math.min(4, height - 4)
@@ -132,6 +127,7 @@ function renderStackedCard(options: WelcomeCardOptions, width: number): string[]
       ? line
       : framedLine(line, width, options.theme, "center")),
     framedLine(`${options.theme.fg("brand", safeModel(options.model))} ${options.theme.fg("muted", "·")} ${phaseText(options.phase, options.theme)}`, width, options.theme, "center"),
+    framedLine(options.theme.fg("muted", "Community client for DeepSeek Harness"), width, options.theme, "center"),
     framedLine(options.theme.fg("muted", "Enter a task or ask about this workspace."), width, options.theme, "center"),
     bottomBorder(width, options.theme),
   ]

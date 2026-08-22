@@ -24,13 +24,14 @@ describe("Claude-style welcome card", () => {
     const plain = stripTerminalSequences(lines.join("\n"))
 
     expect(lines.length).toBeLessThanOrEqual(11)
-    expect(plain).toContain("╭─ DeepSeek Harness  v0.1.0")
+    expect(plain).toContain("╭─ dsh-tui  v0.2.0")
+    expect(plain).toContain("Community client for DeepSeek Harness")
     expect(plain).toContain("Welcome back!")
     expect(plain).toContain("▗█████████▙▖▀████▀")
     expect(plain).toContain("Tips for getting started")
     expect(plain).toContain("Quick actions")
     expect(plain).toContain("deepseek-v4-flash · ready")
-    expect(plain).toContain("dsh-tui")
+    expect(plain.match(/dsh-tui/g)).toHaveLength(1)
     expect(plain).not.toContain("session-1234")
     expect(plain).not.toContain("workspace-write")
     expect(plain).not.toContain("approval ask")
@@ -42,8 +43,8 @@ describe("Claude-style welcome card", () => {
     [96, 11],
     [80, 10],
     [72, 10],
-    [60, 10],
-    [48, 10],
+    [60, 11],
+    [48, 11],
     [40, 4],
     [34, 4],
     [32, 1],
@@ -69,7 +70,7 @@ describe("Claude-style welcome card", () => {
 
   it("uses a compact framed identity before falling back to one line", () => {
     const compact = stripTerminalSequences(card(40).join("\n"))
-    expect(compact).toContain("DeepSeek Harness")
+    expect(compact).toContain("dsh-tui")
     expect(compact).toContain("Enter a task")
     expect(compact).not.toContain("▀")
     expect(stripTerminalSequences(card(32).join("\n"))).toBe("dsh-tui · ready")
