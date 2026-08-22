@@ -23,7 +23,7 @@ dsh-tui 是一个社区维护的 DeepSeek Harness TUI，不是 DeepSeek 官方�
 | `src/backend/acp-client.ts` | 类型化 ACP transport、live barrier 与关闭顺序 |
 | `src/backend/assistant-stream.ts` | live 文本分块、排序与 ACP committed reconciliation |
 | `src/backend/session-log.ts` | JSONL 增量观察、最近 50 条预览与只读历史 |
-| `src/tool-timeline.ts` | live/JSONL 工具生命周期去重 |
+| `src/backend/tool-timeline.ts` | live/JSONL 工具生命周期去重 |
 | `src/approval-queue.ts` | 串行审批、120 秒超时与 abort |
 | `src/ui/app-view.ts` | pi-tui 组合、输入、overlay 与增量 transcript |
 | `src/ui/welcome-card.ts`, `src/ui/theme.ts` | 响应式欢迎卡和 Terminal/DeepSeek Light 主题 |

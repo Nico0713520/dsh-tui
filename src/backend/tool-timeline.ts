@@ -1,14 +1,12 @@
 export type ToolTimelineEvent =
   | {
       kind: "start"
-      source: "live" | "jsonl"
       callId: string
       name: string
       arguments: string
     }
   | {
       kind: "end"
-      source: "live" | "jsonl"
       callId: string
       name: string
       text: string

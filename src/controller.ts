@@ -381,7 +381,6 @@ export class AppController {
       const activity: AppActivity = turnActive ? { kind: "tool", name: record.name } : this.stateValue.activity
       const transcript = this.applyToolEvent({
         kind: "start",
-        source: "live",
         callId: record.callId,
         name: record.name,
         arguments: record.arguments,
@@ -398,7 +397,6 @@ export class AppController {
       const activity: AppActivity = turnActive ? { kind: "thinking" } : this.stateValue.activity
       const transcript = this.applyToolEvent({
         kind: "end",
-        source: "live",
         callId: record.callId,
         name: this.toolTimeline.lookup(record.callId)?.name ?? "tool",
         text: record.text,
@@ -478,7 +476,6 @@ export class AppController {
     if (event.kind === "tool-call") {
       const transcript = this.applyToolEvent({
         kind: "start",
-        source: "jsonl",
         callId: event.callId,
         name: event.name,
         arguments: event.arguments,
@@ -487,7 +484,6 @@ export class AppController {
     } else if (event.kind === "tool-result") {
       const transcript = this.applyToolEvent({
         kind: "end",
-        source: "jsonl",
         callId: event.callId,
         name: event.name,
         text: event.text,

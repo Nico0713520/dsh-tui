@@ -35,7 +35,7 @@ describe("Session Panel", () => {
     expect(text).toContain("/workspace/demo")
     expect(text).toContain("session-1234")
     expect(text).toContain("workspace-write")
-    expect(text).toContain("deep")
+    expect(text).toContain("deep · max reasoning")
     expect(text).not.toMatch(/MCP|Skills|Git|authenticated/i)
   })
 
@@ -51,6 +51,7 @@ describe("Session Panel", () => {
       columns: 32,
     })
     expect(text.split("\n").every((line) => visibleWidth(line) <= 32)).toBe(true)
+    expect(stripTerminalSequences(text)).toContain("quick · low reasoning")
   })
 
   it("shows a concrete recovery action after an unknown backend outcome", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { loadConfig } from "../../src/config.ts"
+import { loadConfig, reasoningEffort } from "../../src/config.ts"
 
 describe("loadConfig", () => {
   it("gives CLI values precedence over environment values", () => {
@@ -66,6 +66,13 @@ describe("loadConfig", () => {
     expect(loadConfig([], { DSH_TUI_EFFORT: "deep" }, "linux").reasoningMode).toBe("deep")
     expect(loadConfig(["--effort", "quick"], { DSH_TUI_EFFORT: "deep" }, "linux").reasoningMode).toBe("quick")
     expect(() => loadConfig(["--effort", "maximum"], {}, "linux")).toThrow(/effort/i)
+    expect(reasoningEffort("quick")).toBe("low")
+    expect(reasoningEffort("deep")).toBe("max")
+  })
+
+  it("rejects unexpected positional arguments", () => {
+    expect(() => loadConfig(["typo-command"], {}, "linux")).toThrow(/unexpected argument/i)
+    expect(() => loadConfig(["--echo", "leftover"], {}, "linux")).toThrow(/unexpected argument/i)
   })
 
   it("resolves theme precedence from CLI, environment, saved preference, then terminal", () => {

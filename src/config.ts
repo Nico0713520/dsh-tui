@@ -7,6 +7,10 @@ export type RunMode = "acp" | "echo"
 export type MotionPreference = "full" | "reduced" | "off"
 export type ReasoningMode = "quick" | "deep"
 
+export function reasoningEffort(mode: ReasoningMode): "low" | "max" {
+  return mode === "deep" ? "max" : "low"
+}
+
 export interface AppConfig {
   mode: RunMode
   model: string
@@ -89,7 +93,11 @@ export function loadConfig(
   defaults: UiPreferences = { theme: "terminal" },
 ): AppConfig {
   const paths = platform === "win32" ? win32 : posix
-  const parsed = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true, strict: true }).values as ParsedValues
+  const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true, strict: true })
+  if (positionals.length > 0) {
+    throw new Error(`unexpected argument: ${JSON.stringify(positionals[0])}`)
+  }
+  const parsed = values as ParsedValues
   const modeValue = parsed.echo === true ? "echo" : parsed.mode ?? env.DSH_TUI_MODE ?? "acp"
   if (modeValue !== "echo" && modeValue !== "acp") {
     throw new Error(`mode must be "echo" or "acp", received ${JSON.stringify(modeValue)}`)

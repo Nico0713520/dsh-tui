@@ -7,7 +7,6 @@ describe("ToolTimeline", () => {
     const timeline = new ToolTimeline(() => now)
     const started = timeline.apply({
       kind: "start",
-      source: "live",
       callId: "c1",
       name: "read_file",
       arguments: "{}",
@@ -15,7 +14,6 @@ describe("ToolTimeline", () => {
     expect(started).toMatchObject({ kind: "append", item: { kind: "tool-call", name: "read_file" } })
     expect(timeline.apply({
       kind: "start",
-      source: "jsonl",
       callId: "c1",
       name: "read_file",
       arguments: "{}",
@@ -24,7 +22,6 @@ describe("ToolTimeline", () => {
     now = 1_875
     const ended = timeline.apply({
       kind: "end",
-      source: "live",
       callId: "c1",
       name: "read_file",
       text: "ok",
@@ -41,7 +38,6 @@ describe("ToolTimeline", () => {
     const timeline = new ToolTimeline(() => 1_000)
     expect(timeline.apply({
       kind: "end",
-      source: "jsonl",
       callId: "missing",
       name: "bash",
       text: "done",
@@ -52,7 +48,6 @@ describe("ToolTimeline", () => {
     })
     expect(timeline.apply({
       kind: "end",
-      source: "live",
       callId: "missing",
       name: "bash",
       text: "duplicate",
@@ -60,7 +55,6 @@ describe("ToolTimeline", () => {
     })).toEqual({ kind: "none" })
     expect(timeline.apply({
       kind: "start",
-      source: "live",
       callId: "",
       name: "bash",
       arguments: "{}",
@@ -69,7 +63,6 @@ describe("ToolTimeline", () => {
     timeline.reset()
     expect(timeline.apply({
       kind: "start",
-      source: "jsonl",
       callId: "missing",
       name: "bash",
       arguments: "{}",
@@ -80,7 +73,6 @@ describe("ToolTimeline", () => {
     const timeline = new ToolTimeline()
     timeline.apply({
       kind: "start",
-      source: "live",
       callId: "approval-call",
       name: "write_file",
       arguments: "{\"path\":\"src/app.ts\"}",

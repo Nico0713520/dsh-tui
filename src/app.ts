@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url"
 import { AcpClient, type AcpClientEvents } from "./backend/acp-client.ts"
 import { SessionLogReader } from "./backend/session-log.ts"
 import { AppController, type BackendPort } from "./controller.ts"
-import type { AppConfig } from "./config.ts"
+import { reasoningEffort, type AppConfig } from "./config.ts"
 import { AppView } from "./ui/app-view.ts"
 import { safeErrorText } from "./text.ts"
 
@@ -80,7 +80,7 @@ export function resolveBackendEnvironment(
     ...baseEnv,
     DSH_MODEL: config.model,
     DSH_PERSIST_ROOT: config.persistRoot,
-    DSH_REASONING_EFFORT: config.reasoningMode === "deep" ? "max" : "low",
+    DSH_REASONING_EFFORT: reasoningEffort(config.reasoningMode),
   }
 }
 
