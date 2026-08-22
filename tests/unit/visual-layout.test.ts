@@ -22,6 +22,7 @@ import {
   renderInterruptedAssistant,
   renderUserMessage,
 } from "../../src/ui/transcript-components.ts"
+import { turnSummaryComponent } from "../../src/ui/turn-summary.ts"
 import { toolCardComponent } from "../../src/ui/tool-card.ts"
 import { WelcomeTranscriptComponent } from "../../src/ui/welcome-panel.ts"
 
@@ -103,6 +104,13 @@ describe("complete visual layout matrix", () => {
         renderUserMessage("你好，这是一个很长的用户问题。".repeat(3), theme),
         renderAssistantMessage("## Result\n\nAssistant prose without an avatar.", theme),
         renderInterruptedAssistant("Partial assistant prose.", "cancelled", theme),
+        turnSummaryComponent({
+          kind: "turn-summary",
+          status: "done",
+          durationMs: 84_000,
+          toolCount: 7,
+          failedToolCount: 1,
+        }, theme),
         new Text(thinkingTraceText(1_250, width, theme), 0, 0),
         toolCardComponent(pending, { expanded: false, frame: 0, theme }),
         toolCardComponent(success, { expanded: true, frame: 0, theme }),

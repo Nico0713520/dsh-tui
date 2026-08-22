@@ -7,6 +7,7 @@ import {
 import type { TranscriptItem } from "../controller.ts"
 import { sanitizeTerminalText } from "../text.ts"
 import { formatDuration } from "./activity-line.ts"
+import { toolCategory, toolCategoryLabel } from "./tool-category.ts"
 import { toolSummary, type SurfaceRole, type UiTheme } from "./theme.ts"
 
 export type ToolItem = Extract<TranscriptItem, { kind: "tool-call" | "tool-result" }>
@@ -29,10 +30,11 @@ export function toolCardText(item: ToolItem, options: ToolCardOptions): string {
   const columns = Math.max(1, options.columns)
   const args = item.arguments ?? "{}"
   const summary = toolSummary(item.name, args, Math.max(8, columns - 2))
+  const label = toolCategoryLabel(toolCategory(item.name))
   if (item.kind === "tool-call") {
     const marker = options.theme.fg("accent", "◌")
     return paintRow(
-      `${options.frame % 4 === 0 ? options.theme.strong(marker) : marker} ${options.theme.fg("muted", summary)}`,
+      `${options.frame % 4 === 0 ? options.theme.strong(marker) : marker} ${options.theme.fg("muted", `${label} · ${summary}`)}`,
       columns,
       "toolPending",
       options.theme,
@@ -43,7 +45,7 @@ export function toolCardText(item: ToolItem, options: ToolCardOptions): string {
   const duration = item.durationMs === undefined ? "" : ` · ${formatDuration(item.durationMs)}`
   const surface: SurfaceRole = item.isError ? "toolError" : "toolSuccess"
   const header = paintRow(
-    `${options.theme.fg(tone, marker)} ${options.theme.fg("text", summary)}${options.theme.fg("muted", duration)}`,
+    `${options.theme.fg(tone, marker)} ${options.theme.fg("muted", `${label} · `)}${options.theme.fg("text", summary)}${options.theme.fg("muted", duration)}`,
     columns,
     surface,
     options.theme,

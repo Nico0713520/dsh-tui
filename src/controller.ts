@@ -19,6 +19,14 @@ export type AppActivity =
 
 export type InterruptedReason = "cancelled" | "outcome-unknown"
 
+export interface TurnSummaryItem {
+  kind: "turn-summary"
+  status: "done" | InterruptedReason | "failed"
+  durationMs: number
+  toolCount: number
+  failedToolCount: number
+}
+
 export type TranscriptItem =
   | { kind: "user" | "assistant" | "diagnostic"; text: string }
   | { kind: "interrupted-assistant"; text: string; reason: InterruptedReason }
@@ -26,6 +34,7 @@ export type TranscriptItem =
   | { kind: "tool-call"; name: string; arguments: string }
   | { kind: "tool-result"; name: string; arguments?: string; text: string; isError: boolean; durationMs?: number }
   | { kind: "history-boundary"; text: string }
+  | TurnSummaryItem
 
 export interface AppState {
   phase: AppPhase
@@ -102,6 +111,9 @@ export class AppController {
   private readonly turnPerf = new TurnPerf()
   private readonly now: () => number
   private perfReported = false
+  private turnStartedAtMs: number | null = null
+  private turnToolCount = 0
+  private turnFailedToolCount = 0
   private stateValue: AppState = {
     phase: "starting",
     sessionId: null,
@@ -183,6 +195,9 @@ export class AppController {
     this.committedAssistantText = ""
     this.turnPerf.start()
     this.perfReported = false
+    this.turnStartedAtMs = this.now()
+    this.turnToolCount = 0
+    this.turnFailedToolCount = 0
     this.setState({
       phase: "working",
       backendMessage: null,
@@ -199,6 +214,7 @@ export class AppController {
         this.setState({ partialAssistantText: "", interruption: "cancelled" })
         this.reportPerf()
         this.setState({ phase: "ready", activity: { kind: "idle" }, backendMessage: "interrupted" })
+        this.finishTurn("cancelled")
         void this.drainQueuedPrompt()
         return
       }
@@ -217,11 +233,14 @@ export class AppController {
         activity: { kind: "idle" },
         backendMessage: result.stopReason === "cancelled" ? "interrupted" : null,
       })
+      this.finishTurn(result.stopReason === "cancelled" ? "cancelled" : "done")
       void this.drainQueuedPrompt()
     } catch (error) {
       if (this.isClosing() || this.stateValue.phase === "failed") return
       this.turnPerf.mark("settled")
       this.finishAssistant("outcome-unknown")
+      this.setState({ activity: { kind: "idle" } })
+      this.finishTurn("failed")
       this.reportPerf()
       this.fail(error)
     }
@@ -427,8 +446,11 @@ export class AppController {
     if (info.outcomeUnknown) {
       const snapshot = this.assistantStream.interrupt("outcome-unknown")
       this.setState({ partialAssistantText: snapshot.text, interruption: "outcome-unknown", activity: { kind: "idle" } })
+    } else {
+      this.setState({ activity: { kind: "idle" } })
     }
     this.finishAssistant("outcome-unknown")
+    this.finishTurn(info.outcomeUnknown ? "outcome-unknown" : "failed")
     this.turnPerf.mark("settled")
     this.reportPerf()
     this.fail(new Error(info.outcomeUnknown ? "Backend exited; prompt outcome is unknown." : "Backend exited."))
@@ -480,12 +502,33 @@ export class AppController {
   private applyToolEvent(event: ToolTimelineEvent): readonly TranscriptItem[] | null {
     const mutation = this.toolTimeline.apply(event)
     if (mutation.kind === "none") return null
+    if (event.kind === "end" && this.turnStartedAtMs !== null) {
+      this.turnToolCount += 1
+      if (event.isError) this.turnFailedToolCount += 1
+    }
     if (mutation.kind === "append") return [...this.stateValue.transcript, mutation.item]
     const transcript = [...this.stateValue.transcript]
     const index = transcript.findIndex((item) => item === mutation.target)
     if (index >= 0 && transcript[index]?.kind === "tool-call") transcript[index] = mutation.item
     else transcript.push(mutation.item)
     return transcript
+  }
+
+  private finishTurn(status: TurnSummaryItem["status"]): void {
+    const startedAtMs = this.turnStartedAtMs
+    if (startedAtMs === null) return
+    const durationMs = Math.max(0, this.now() - startedAtMs)
+    this.turnStartedAtMs = null
+    // Avoid adding visual noise for effectively instant, tool-free turns.
+    if (status === "done" && this.turnToolCount === 0 && durationMs < 250) return
+    const summary: TurnSummaryItem = {
+      kind: "turn-summary",
+      status,
+      durationMs,
+      toolCount: this.turnToolCount,
+      failedToolCount: this.turnFailedToolCount,
+    }
+    this.setState({ transcript: [...this.stateValue.transcript, summary] })
   }
 
   private resetLiveMetadata(): void {

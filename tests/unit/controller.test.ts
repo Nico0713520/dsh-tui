@@ -420,6 +420,46 @@ describe("AppController", () => {
     await prompt
   })
 
+  it("appends a truthful turn summary from unique tool results", async () => {
+    let now = 1_000
+    const harness = createHarness({}, () => now)
+    harness.deferPrompt()
+    await harness.controller.start()
+    const prompt = harness.controller.submit("check")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    now = 1_200
+    harness.controller.onLiveRecord({
+      v: 1, sessionId: "session-1", seq: 1, kind: "tool-start", turn: 1, step: 1,
+      callId: "read", name: "read_file", arguments: "{}",
+    })
+    now = 1_500
+    harness.controller.onLiveRecord({
+      v: 1, sessionId: "session-1", seq: 2, kind: "tool-end", turn: 1, step: 1,
+      callId: "read", isError: false, text: "ok",
+    })
+    harness.controller.onLiveRecord({
+      v: 1, sessionId: "session-1", seq: 3, kind: "tool-start", turn: 1, step: 2,
+      callId: "test", name: "npm_test", arguments: "{}",
+    })
+    now = 2_000
+    harness.controller.onLiveRecord({
+      v: 1, sessionId: "session-1", seq: 4, kind: "tool-end", turn: 1, step: 2,
+      callId: "test", isError: true, text: "failed",
+    })
+    now = 2_500
+    harness.finishPrompt()
+    await prompt
+
+    expect(harness.controller.state.transcript).toContainEqual({
+      kind: "turn-summary",
+      status: "done",
+      durationMs: 1_500,
+      toolCount: 2,
+      failedToolCount: 1,
+    })
+  })
+
   it("finishes fresh tool and usage records that arrive after ACP text", async () => {
     const harness = createHarness({ toolCards: false })
     harness.deferPrompt()
@@ -695,6 +735,13 @@ describe("AppController", () => {
       { kind: "user", text: "first" },
       { kind: "assistant", text: "previous answer" },
       { kind: "user", text: "cancel before send" },
+      {
+        kind: "turn-summary",
+        status: "cancelled",
+        durationMs: expect.any(Number),
+        toolCount: 0,
+        failedToolCount: 0,
+      },
     ])
     expect(harness.controller.state.interruption).toBe("cancelled")
   })

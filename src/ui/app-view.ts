@@ -39,6 +39,7 @@ import { footerText, type FooterOptions } from "./footer.ts"
 import { showApprovalPanel } from "./approval-panel.ts"
 import { showModalPanel } from "./modal-panel.ts"
 import { sessionPanelText } from "./session-panel.ts"
+import { turnSummaryComponent } from "./turn-summary.ts"
 
 export interface ViewActions {
   onSubmit(text: string): void
@@ -375,6 +376,8 @@ export class AppView implements ControllerView {
       }))
     } else if (item.kind === "history-boundary") {
       this.committedTranscript.addChild(renderHistoryBoundary(item.text, this.theme))
+    } else if (item.kind === "turn-summary") {
+      this.committedTranscript.addChild(turnSummaryComponent(item, this.theme))
     } else {
       this.committedTranscript.addChild(renderDiagnostic(item.text, this.theme))
     }

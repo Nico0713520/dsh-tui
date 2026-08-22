@@ -26,9 +26,11 @@ describe("tool cards", () => {
       { columns: 80, expanded: false, frame: 0, theme },
     )
 
-    expect(stripTerminalSequences(pending)).toMatch(/◌ read_file src\/app\.ts/)
-    expect(stripTerminalSequences(success)).toMatch(/✓ read_file src\/app\.ts · 1\.3s/)
-    expect(stripTerminalSequences(error)).toMatch(/✕ read_file src\/app\.ts · 1\.3s/)
+    expect(stripTerminalSequences(pending)).toMatch(/◌ Read · read_file src\/app\.ts/)
+    expect(stripTerminalSequences(success)).toMatch(/✓ Read · read_file src\/app\.ts · 1\.3s/)
+    expect(stripTerminalSequences(error)).toMatch(/✕ Read · read_file src\/app\.ts · 1\.3s/)
+    expect(toolCardText(result, { columns: 80, expanded: false, frame: 0, theme }))
+      .toBe(toolCardText(result, { columns: 80, expanded: false, frame: 3, theme }))
   })
 
   it("keeps compact output to two rows and expanded output bounded", () => {
